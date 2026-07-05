@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>无尽刀战 - Stickman Battle</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; user-select: none; }
+        canvas { display: block; }
+        
+        /* UI 覆盖层通用样式 */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.85); color: #fff; z-index: 10;
+        }
+        .hidden { display: none !important; }
+        
+        h1 { font-size: 4rem; margin-bottom: 1rem; text-shadow: 0 0 20px #f00; color: #ff4444; }
+        h2 { font-size: 2rem; margin-bottom: 2rem; color: #ccc; }
+        
+        .btn {
+            padding: 15px 40px; margin: 10px; font-size: 1.5rem; border: none; border-radius: 8px;
+            cursor: pointer; transition: 0.3s; color: #fff; font-weight: bold; min-width: 200px;
+        }
+        .btn:hover { transform: scale(1.1); filter: brightness(1.2); }
+        
+        .btn-easy { background: #4CAF50; }
+        .btn-medium { background: #FF9800; }
+        .btn-hard { background: #F44336; }
+        .btn-crazy { background: linear-gradient(45deg, #f00, #ff0, #0f0, #00f); background-size: 400% 400%; animation: gradient 3s ease infinite; }
+        
+        @keyframes gradient { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+
+        /* HUD */
+        #hud {
+            position: absolute; top: 20px; right: 20px; text-align: right; color: #fff; font-size: 1.2rem; z-index: 5;
+            text-shadow: 1px 1px 2px #000; pointer-events: none;
+        }
+        #shopBtn {
+            position: absolute; top: 20px; left: 20px; z-index: 5;
+            background: #FFD700; color: #000; border: none; padding: 10px 20px;
+            border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 1.2rem;
+        }
+        #shopBtn:hover { background: #fff; }
+
+        /* 商城样式 */
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            max-width: 800px;
+            max-height: calc(100vh - 240px);
+            overflow-y: auto;
+            padding-bottom: 20px;
+            width: 100%;
+        }
+        .shop-item {
+            background: #333; padding: 20px; border-radius: 10px; text-align: center; border: 2px solid #555;
+        }
+        .shop-item h3 { margin: 0 0 10px 0; color: #FFD700; }
+        .shop-item p { margin: 5px 0; color: #aaa; font-size: 0.9rem; }
+        .shop-section {
+            grid-column: 1 / -1;
+            text-align: left;
+            padding: 10px 20px;
+            border-bottom: 1px solid #555;
+            margin-bottom: 10px;
+        }
+        .shop-section h3 { margin: 0; color: #FFD700; }
+        .buy-btn {
+            margin-top: 10px; background: #4CAF50; border: none; color: #fff;
+            padding: 8px 15px; border-radius: 5px; cursor: pointer;
+        }
+        .buy-btn:disabled { background: #555; cursor: not-allowed; }
+        .owned { color: #4CAF50; font-weight: bold; margin-top: 10px; display: block;}
+
+        /* 提示 */
+        .controls-hint {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            color: #888; font-size: 0.9rem; z-index: 5; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 主菜单 -->
+    <div id="menuScreen" class="overlay">
+        <h1>无尽刀战</h1>
+        <h2>选择难度</h2>
+        <button class="btn btn-easy" onclick="game.start('easy')">简单</button>
+        <button class="btn btn-medium" onclick="game.start('medium')">中等</button>
+        <button class="btn btn-hard" onclick="game.start('hard')">困难</button>
+        <button class="btn btn-crazy" onclick="game.start('crazy')">疯狂</button>
+    </div>
+
+    <!-- 死亡结算 -->
+    <div id="deathScreen" class="overlay hidden">
+        <h1 style="color:#f00">你倒下了</h1>
+        <h2>最终金币: <span id="finalGold">0</span></h2>
+        <button class="btn btn-easy" onclick="location.reload()">返回主菜单</button>
+    </div>
+
+    <!-- 商城 -->
+    <div id="shopScreen" class="overlay hidden">
+        <h2>商城</h2>
+        <div class="shop-grid" id="shopItems"></div>
+        <button class="btn" style="background:#666; margin-top:30px;" onclick="game.toggleShop()">返回战斗 (ESC)</button>
+    </div>
+
+    <!-- 作弊模式 -->
+    <div id="cheatScreen" class="overlay hidden">
+        <h2>作弊模式</h2>
+        <p>输入金币数量，按“确定”获取相应金币。</p>
+        <input id="cheatInput" type="number" min="0" placeholder="输入金币数量" style="padding:12px 16px; font-size:1.1rem; width:260px; border-radius:8px; border:none; margin-bottom:20px; text-align:center;" />
+        <div>
+            <button class="btn btn-easy" style="min-width:140px;" onclick="game.applyCheatGold()">确定</button>
+            <button class="btn" style="background:#666; min-width:140px; margin-left:10px;" onclick="game.toggleCheatScreen()">取消</button>
+        </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+        <div>金币: <span id="goldDisplay">0</span></div>
+        <div style="margin-top:8px;">击杀: <span id="killDisplay">0</span></div>
+        <div style="margin-top:10px;">血量: <span id="hpDisplay">100</span>/<span id="maxHpDisplay">100</span></div>
+        <div style="margin-top:5px; font-size:0.9rem; color:#aaa;">角色: <span id="roleDisplay">无</span></div>
+        <div style="margin-top:5px; font-size:0.9rem; color:#aaa;">武器: <span id="weaponDisplay">匕首</span></div>
+        <div style="margin-top:5px; font-size:0.9rem; color:#aaa;">装备: <span id="equipmentDisplay">无</span></div>
+    </div>
+    <button id="shopBtn" class="hidden" onclick="game.toggleShop()">🛒 商城</button>
+    <div class="controls-hint hidden" id="controlsHint">
+        W/S: 移动 | A: 攻击连招 | J: 火焰释放 | Q: 转身 | ESC: 商城
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+/**
+ * 游戏配置与数据
+ */
+const CONFIG = {
+    gravity: 0.6,
+    groundY: 0, // 会在 resize 中计算
+    playerSpeed: 5,
+    npcSpawnRate: { easy: 180, medium: 120, hard: 80, crazy: 50 }, // 帧数
+    npcSpeed: { easy: 1.5, medium: 3, hard: 4.5, crazy: 5 },
+    maxNpcs: { easy: 3, medium: 6, hard: 10, crazy: 20 },
+    damageVariance: [5, 7] // 玩家受伤扣血范围
+};
+
+const WEAPONS = {
+    dagger: { name: '匕首', cost: 0, dmg: 20, dual: false, color: '#ccc', len: 30 },
+    katana: { name: '武士刀', cost: 500, dmg: 25, dual: false, color: '#eee', len: 50 },
+    dualKatana: { name: '双持武士刀', cost: 1200, dmg: 50, dual: true, color: '#eee', len: 50, req: 'katana' },
+    laser: { name: '激光剑', cost: 1000, dmg: 50, dual: false, color: '#0ff', len: 60, glow: true },
+    dualLaser: { name: '激光棍', cost: 2400, dmg: 100, dual: false, color: '#0ff', len: 120, glow: true, req: 'laser' },
+    rocket: { name: '火尖枪', cost: 7000, dmg: 300, dual: false, color: '#f80', len: 80, type: 'gun' },
+    dualRocket: { name: '双持火尖枪', cost: 15000, dmg: 600, dual: true, color: '#f80', len: 80, type: 'gun', req: 'rocket' },
+    jingu: { name: '金箍棒', cost: 10000, dmg: 500, dual: false, color: '#FFD700', len: 80, type: 'staff' },
+    thunderHammer: { name: '雷神之锤', cost: 6000, dmg: 150, dual: false, color: '#88f', len: 70, type: 'thunder' },
+    flameAxe: { name: '烈焰战斧', cost: 6000, dmg: 150, dual: false, color: '#f44', len: 70, type: 'fire' },
+    nuke: { name: '核弹', cost: 1000000, dmg: 1500, dual: false, color: '#f00', len: 50, type: 'nuke' }
+};
+
+const EQUIPMENT = {
+    windFireWheel: { name: '风火轮', cost: 5000, fireDamage: 50, speedMul: 1.5, color: '#f60', description: '双圈脚下装备，受击反伤并在移动时产生火焰粒子，同时提升移速50%。' },
+    medDrone: { name: '医疗无人机', cost: 10000, description: '每两秒回血1点，跟随玩家身边。' },
+    laserDrone: { name: '激光无人机', cost: 10000, description: '最多可装备两个，左右跟随玩家，每秒向任意敌方NPC发射激光，造成100点伤害。' }
+};
+
+// 新增装备：荆棘权杖、召唤权杖、藤甲
+EQUIPMENT.thornStaff = { name: '荆棘权杖', cost: 5000, description: '每20秒在前方召唤一堵荆棘墙，阻挡并伤害前方敌人（不可通过）。' };
+EQUIPMENT.summonStaff = { name: '召唤权杖', cost: 7500, description: '每10秒自动召唤一名武士刀盟友，帮助攻击敌方。' };
+EQUIPMENT.superSummonStaff = { name: '超级召唤权杖', cost: 20000, description: '每5秒自动召唤一名激光NPC友方，帮助攻击敌方。' };
+EQUIPMENT.vineArmor = { name: '藤甲', cost: 6000, armorMul: 0.4, description: '提升40%护甲，但受到火尖枪类NPC攻击时额外承受25%伤害。' };
+
+const ITEMS = {
+    healthPotion: { name: '治疗药水', cost: 5000, healPercent: 0.2, description: '购买后立即回复20%血量，无需额外操作。' },
+    speedPotion: { name: '速度药水', cost: 5000, speedMul: 2, duration: 60 * 60, description: '购买后立即生效，移动速度提升100%，持续时间1分钟。' },
+    defensePotion: { name: '防御药水', cost: 5000, armorAdd: 0.5, duration: 60 * 60, description: '购买后立即生效，护甲提升50%，持续时间1分钟。' },
+    ragePotion: { name: '狂暴药水', cost: 5000, attackMul: 2, duration: 60 * 60, description: '购买后立即生效，攻击力提升100%，持续时间1分钟。' },
+    turret: { name: '机器人炮塔', cost: 15000, spawnTurret: true, description: '史诗级道具，购买后直接放置在地上。每秒发射两枚子弹，攻击最近的敌方NPC。' }
+};
+
+const CHARACTERS = {
+    oldMan: {
+        name: '老者',
+        cost: 10000,
+        armor: 0.15,
+        hp: 600,
+        weaponBoost: { laser: 1.2, dualLaser: 1.2 },
+        description: '激光武器攻击力提升20%，并附带雷电麻痹效果。'
+    },
+    nezha: {
+        name: '哪吒',
+        cost: 20000,
+        armor: 0.25,
+        hp: 750,
+        weaponBoost: { windFireWheel: 1.3, rocket: 1.3, dualRocket: 1.3 },
+        description: '风火轮/火箭枪攻击力提升30%。'
+    },
+    wukong: {
+        name: '孙悟空',
+        cost: 40000,
+        armor: 0.4,
+        hp: 1000,
+        weaponBoost: { jingu: 1.5 },
+        description: '金箍棒伤害增加50%。'
+    },
+    zhuRong: {
+        name: '祝融',
+        cost: 15000,
+        armor: 0.3,
+        hp: 800,
+        weaponBonus: { flameAxe: 50 },
+        description: '身上附带火焰效果，烈焰战斧伤害额外+50，并每5秒发射双向火焰冲击波。'
+    },
+    thor: {
+        name: '索尔',
+        cost: 15000,
+        armor: 0.3,
+        hp: 850,
+        weaponBonus: { thunderHammer: 50 },
+        description: '身上附带雷电效果，雷神之锤伤害额外+50，并每5秒发射双向雷电冲击波。'
+    }
+};
+
+const ENEMY_TYPES = {
+    samurai: { hp: 100, dmg: 25, speedMul: 1, color: '#aaa', weapon: 'katana', name: '武士', h: 60, w: 20 },
+    laser: { hp: 150, dmg: 15, speedMul: 1.2, color: '#0ff', weapon: 'laser', name: '激光兵', h: 60, w: 20 }, // 注意：题目说激光NPC伤害15，但玩家激光伤害50，这里按题目
+    rocket: { hp: 300, dmg: 30, speedMul: 0.8, color: '#f80', weapon: 'rocket', name: '火箭兵', h: 60, w: 20 },
+    wukong: { hp: 500, dmg: 50, speedMul: 1.5, color: '#FFD700', weapon: 'jingu', name: '孙悟空', isWukong: true, h: 60, w: 20 },
+    donquixote: { hp: 150, dmg: 75, speedMul: 1.5, color: '#8A2BE2', weapon: 'katana', name: '堂吉诃德', h: 60, w: 20 },
+    giant: { hp: 300, dmg: 75, speedMul: 1, color: '#663300', weapon: 'katana', name: '巨人', h: 180, w: 40 }
+};
+
+/**
+ * 核心游戏类
+ */
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        
+        this.state = 'MENU'; // MENU, PLAYING, SHOP, DEAD
+        this.difficulty = 'easy';
+        this.gold = 0;
+        this.frameCount = 0;
+        this.killCount = 0;
+        
+        // 玩家状态
+        this.player = {
+            x: 0, y: 0, vx: 0, vy: 0,
+            w: 20, h: 60,
+            hp: 500, maxHp: 500,
+            facing: 1, // 1 right, -1 left
+            weapon: 'dagger',
+            ownedWeapons: ['dagger'],
+            ownedEquipment: [],
+            equippedEquipment: [],
+            ownedCharacters: [],
+            currentCharacter: null,
+            armor: 0,
+            // 新增计时器：荆棘与召唤
+            thornTimer: 0,
+            summonTimer: 0,
+            rocketHitCount: 0,
+            rocketFlameReady: false,
+            jCooldown: 0,
+            characterTimer: 20 * 60,
+            laserDroneTimer: 60,
+            speedPotionTime: 0,
+            defensePotionTime: 0,
+            armorBonus: 0,
+            ragePotionTime: 0,
+            isAttacking: false,
+            attackFrame: 0,
+            attackCombo: 0, // 连招计数
+            attackCooldown: 0,
+            invincible: 0, // 无敌帧
+            animState: 'idle' // idle, walk, attack
+        };
+        
+        // 荆棘墙容器
+        this.thornWalls = [];
+        this.nukes = [];
+        this.mushrooms = [];
+        this.laserBeams = [];
+
+        this.npcs = [];
+        this.particles = [];
+        this.keys = {};
+        
+        this.initInput();
+        this.loop();
+    }
+
+    resize() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        CONFIG.groundY = this.canvas.height - 50;
+        if (this.player) {
+            this.player.y = CONFIG.groundY - this.player.h;
+            if (this.state === 'MENU') this.player.x = this.canvas.width / 2;
+        }
+    }
+
+    initInput() {
+        window.addEventListener('keydown', e => {
+            this.keys[e.key.toLowerCase()] = true;
+            if (e.key === 'Escape' && this.state === 'PLAYING') this.toggleShop();
+            else if (e.key === 'Escape' && this.state === 'SHOP') this.toggleShop();
+            
+            if (this.state === 'PLAYING' || this.state === 'SHOP') {
+                if (e.key.toLowerCase() === 'a') this.playerAttack();
+                if (e.key.toLowerCase() === 'j') this.trySpecialWave();
+                if (e.key.toLowerCase() === 'q') this.player.facing *= -1;
+                if (e.key === '1') this.toggleCheatScreen();
+            } else if (this.state === 'CHEAT' && e.key === '1') {
+                this.toggleCheatScreen();
+            }
+        });
+        window.addEventListener('keyup', e => this.keys[e.key.toLowerCase()] = false);
+    }
+
+    start(diff) {
+        this.difficulty = diff;
+        this.state = 'PLAYING';
+        this.gold = 0;
+        this.killCount = 0;
+        this.player.hp = 500;
+        this.player.maxHp = 500;
+        this.player.armor = 0;
+        this.player.thornTimer = 20 * 60;
+        this.player.summonTimer = 10 * 60;
+        this.player.jCooldown = 0;
+        this.player.characterTimer = 20 * 60;
+        this.player.currentCharacter = null;
+        this.player.ownedWeapons = ['dagger'];
+        this.player.ownedEquipment = [];
+        this.player.equippedEquipment = [];
+        this.player.ownedCharacters = [];
+        this.player.rocketHitCount = 0;
+        this.player.rocketFlameReady = false;
+        this.player.laserDroneTimer = 60;
+        this.player.x = this.canvas.width / 2;
+        this.player.y = CONFIG.groundY - this.player.h;
+        this.player.weapon = 'dagger';
+        this.npcs = [];
+        this.particles = [];
+        this.thornWalls = [];
+        this.nukes = [];
+        this.mushrooms = [];
+        this.laserBeams = [];
+        this.turrets = [];
+        this.turretBullets = [];
+        this.player.laserDroneTimer = 60;
+        this.player.superSummonTimer = 5 * 60;
+        this.player.speedPotionTime = 0;
+        this.player.defensePotionTime = 0;
+        this.player.armorBonus = 0;
+        this.player.ragePotionTime = 0;
+
+        if (this.difficulty === 'hard') {
+            for (let i = 0; i < 5; i++) {
+                this.npcs.push({
+                    x: this.player.x + (i - 2) * 80,
+                    y: CONFIG.groundY - 60,
+                    w: 20,
+                    h: 60,
+                    hp: 120,
+                    maxHp: 120,
+                    dmg: ENEMY_TYPES.samurai.dmg,
+                    speed: CONFIG.npcSpeed[this.difficulty] * ENEMY_TYPES.samurai.speedMul,
+                    color: '#eee',
+                    weapon: 'katana',
+                    type: 'ally',
+                    ally: true,
+                    summoned: true,
+                    animFrame: 0,
+                    hitFlash: 0
+                });
+            }
+        }
+        if (this.difficulty === 'crazy') {
+            for (let i = 0; i < 2; i++) {
+                this.npcs.push({
+                    x: this.player.x + (i === 0 ? -120 : 120),
+                    y: CONFIG.groundY - 60,
+                    w: 20,
+                    h: 60,
+                    hp: 120,
+                    maxHp: 120,
+                    dmg: ENEMY_TYPES.laser.dmg,
+                    speed: CONFIG.npcSpeed[this.difficulty] * ENEMY_TYPES.laser.speedMul,
+                    color: '#0ff',
+                    weapon: 'laser',
+                    type: 'ally',
+                    ally: true,
+                    summoned: true,
+                    animFrame: 0,
+                    hitFlash: 0
+                });
+            }
+        }
+        
+        document.getElementById('menuScreen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('shopBtn').classList.remove('hidden');
+        document.getElementById('controlsHint').classList.remove('hidden');
+        this.updateHUD();
+    }
+
+    die() {
+        this.state = 'DEAD';
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('shopBtn').classList.add('hidden');
+        document.getElementById('controlsHint').classList.add('hidden');
+        document.getElementById('deathScreen').classList.remove('hidden');
+        document.getElementById('finalGold').innerText = this.gold;
+    }
+
+    toggleShop() {
+        if (this.state === 'DEAD') return;
+        if (this.state === 'SHOP') {
+            this.state = 'PLAYING';
+            document.getElementById('shopScreen').classList.add('hidden');
+        } else if (this.state === 'PLAYING') {
+            this.state = 'SHOP';
+            this.renderShop();
+            document.getElementById('shopScreen').classList.remove('hidden');
+        }
+    }
+
+    toggleCheatScreen() {
+        if (this.state === 'CHEAT') {
+            document.getElementById('cheatScreen').classList.add('hidden');
+            if (this.prevState === 'SHOP') {
+                this.state = 'SHOP';
+                document.getElementById('shopScreen').classList.remove('hidden');
+            } else {
+                this.state = 'PLAYING';
+            }
+            this.prevState = null;
+            return;
+        }
+        if (this.state === 'DEAD') return;
+        this.prevState = this.state;
+        this.state = 'CHEAT';
+        document.getElementById('cheatScreen').classList.remove('hidden');
+        document.getElementById('cheatInput').value = '';
+        if (this.prevState === 'SHOP') {
+            document.getElementById('shopScreen').classList.add('hidden');
+        }
+    }
+
+    applyCheatGold() {
+        const input = document.getElementById('cheatInput');
+        const amount = Math.max(0, parseInt(input.value, 10) || 0);
+        if (amount > 0) {
+            this.gold += amount;
+            this.updateHUD();
+        }
+        this.toggleCheatScreen();
+    }
+
+    renderShop() {
+        const container = document.getElementById('shopItems');
+        container.innerHTML = '';
+
+        const weaponHeader = document.createElement('div');
+        weaponHeader.className = 'shop-section';
+        weaponHeader.innerHTML = '<h3>武器</h3>';
+        container.appendChild(weaponHeader);
+
+        for (const [key, w] of Object.entries(WEAPONS)) {
+            if (key === 'dagger') continue;
+            const isConsumable = key === 'nuke';
+            const owned = !isConsumable && this.player.ownedWeapons.includes(key);
+            const canAfford = this.gold >= w.cost;
+            const hasReq = !w.req || this.player.ownedWeapons.includes(w.req);
+            const isEquipped = this.player.weapon === key;
+            
+            const div = document.createElement('div');
+            div.className = 'shop-item';
+            div.innerHTML = `
+                <h3>${w.name}</h3>
+                <p>伤害: ${w.dmg} ${w.dual ? '(双持)' : ''}</p>
+                <p>价格: ${w.cost} 金币</p>
+                ${!hasReq ? `<p style="color:#f00">需要: ${WEAPONS[w.req].name}</p>` : ''}
+                ${owned ? 
+                    isEquipped ? `<span class="owned">已装备</span>` : `<button class="buy-btn" onclick="game.buyWeapon('${key}')">切换</button>` : 
+                    `<button class="buy-btn" ${(!canAfford || !hasReq) ? 'disabled' : ''} onclick="game.buyWeapon('${key}')">购买</button>`
+                }
+            `;
+            container.appendChild(div);
+        }
+
+        const equipHeader = document.createElement('div');
+        equipHeader.className = 'shop-section';
+        equipHeader.innerHTML = '<h3>装备</h3>';
+        container.appendChild(equipHeader);
+
+        for (const [key, e] of Object.entries(EQUIPMENT)) {
+            const owned = this.player.ownedEquipment.includes(key);
+            const equippedCount = this.player.equippedEquipment.filter(k => k === key).length;
+            const isLaserDrone = key === 'laserDrone';
+            const equipped = isLaserDrone ? equippedCount > 0 : this.player.equippedEquipment.includes(key);
+            const canAfford = this.gold >= e.cost;
+            const div = document.createElement('div');
+            div.className = 'shop-item';
+            let actionHtml = '';
+            if (isLaserDrone && owned) {
+                if (equippedCount >= 2) {
+                    actionHtml = `<span class="owned">已装备</span>`;
+                } else {
+                    actionHtml = `<button class="buy-btn" onclick="game.buyEquipment('${key}')">再装备一个</button>`;
+                }
+            } else {
+                actionHtml = equipped ? `<span class="owned">已装备</span>` : owned ? `<button class="buy-btn" onclick="game.buyEquipment('${key}')">装备</button>` : `<button class="buy-btn" ${!canAfford ? 'disabled' : ''} onclick="game.buyEquipment('${key}')">购买</button>`;
+            }
+            div.innerHTML = `
+                <h3>${e.name}</h3>
+                <p>${e.description}</p>
+                ${e.fireDamage ? `<p>火焰伤害: ${e.fireDamage}</p>` : ''}
+                <p>价格: ${e.cost} 金币</p>
+                ${actionHtml}
+            `;
+            container.appendChild(div);
+        }
+
+        const itemHeader = document.createElement('div');
+        itemHeader.className = 'shop-section';
+        itemHeader.innerHTML = '<h3>道具</h3>';
+        container.appendChild(itemHeader);
+
+        for (const [key, item] of Object.entries(ITEMS)) {
+            const canAfford = this.gold >= item.cost;
+            const div = document.createElement('div');
+            div.className = 'shop-item';
+            if (item.spawnTurret) {
+                div.style.borderColor = '#a020f0';
+                div.style.boxShadow = '0 0 12px rgba(160,32,240,0.8)';
+            }
+            div.innerHTML = `
+                <h3>${item.name}</h3>
+                <p>${item.description}</p>
+                <p>价格: ${item.cost} 金币</p>
+                <button class="buy-btn" ${!canAfford ? 'disabled' : ''} onclick="game.buyItem('${key}')">购买</button>
+            `;
+            container.appendChild(div);
+        }
+
+        const charHeader = document.createElement('div');
+        charHeader.className = 'shop-section';
+        charHeader.innerHTML = '<h3>角色</h3>';
+        container.appendChild(charHeader);
+
+        for (const [key, c] of Object.entries(CHARACTERS)) {
+            const owned = this.player.ownedCharacters.includes(key);
+            const selected = this.player.currentCharacter === key;
+            const canAfford = this.gold >= c.cost;
+            const div = document.createElement('div');
+            div.className = 'shop-item';
+            div.innerHTML = `
+                <h3>${c.name}</h3>
+                <p>血量: ${c.hp}</p>
+                <p>护甲: ${ (c.armor >= 1) ? Math.round(c.armor) : Math.round(c.armor * 100) }%</p>
+                <p>${c.description}</p>
+                <p>价格: ${c.cost} 金币</p>
+                ${selected ? `<span class="owned">已装备</span>` : owned ? `<button class="buy-btn" onclick="game.buyCharacter('${key}')">装备</button>` : `<button class="buy-btn" ${!canAfford ? 'disabled' : ''} onclick="game.buyCharacter('${key}')">购买</button>`}
+            `;
+            container.appendChild(div);
+        }
+    }
+
+    buyWeapon(key) {
+        const w = WEAPONS[key];
+        const isConsumable = key === 'nuke';
+        const owned = this.player.ownedWeapons.includes(key);
+        if (this.gold < w.cost) return;
+        this.gold -= w.cost;
+        if (isConsumable) {
+            this.spawnNukeDrop();
+        } else {
+            if (!owned) {
+                this.player.ownedWeapons.push(key);
+            }
+            this.player.weapon = key; // 购买或切换都装备
+        }
+        this.updateHUD();
+        this.renderShop();
+    }
+
+    buyCharacter(key) {
+        const c = CHARACTERS[key];
+        if (!this.player.ownedCharacters.includes(key)) {
+            if (this.gold < c.cost) return;
+            this.gold -= c.cost;
+            this.player.ownedCharacters.push(key);
+        }
+        this.player.currentCharacter = key;
+        this.applyCharacter();
+        this.updateHUD();
+        this.renderShop();
+    }
+
+    buyEquipment(key) {
+        const e = EQUIPMENT[key];
+        if (!this.player.ownedEquipment.includes(key)) {
+            if (this.gold < e.cost) return;
+            this.gold -= e.cost;
+            this.player.ownedEquipment.push(key);
+        }
+        if (key === 'laserDrone') {
+            const count = this.player.equippedEquipment.filter(k => k === 'laserDrone').length;
+            if (count < 2) {
+                this.player.equippedEquipment.push(key);
+            }
+        } else {
+            if (!this.player.equippedEquipment.includes(key)) {
+                // 权杖类（thornStaff / summonStaff）一次只能装备一个：如果装备了另一个则先移除
+                if ((key === 'thornStaff' || key === 'summonStaff')) {
+                    const other = key === 'thornStaff' ? 'summonStaff' : 'thornStaff';
+                    const idx = this.player.equippedEquipment.indexOf(other);
+                    if (idx !== -1) this.player.equippedEquipment.splice(idx, 1);
+                }
+                this.player.equippedEquipment.push(key);
+            }
+        }
+        this.updateHUD();
+        this.renderShop();
+    }
+
+    buyItem(key) {
+        const item = ITEMS[key];
+        if (this.gold < item.cost) return;
+        this.gold -= item.cost;
+        if (item.healPercent) {
+            this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.maxHp * item.healPercent);
+        }
+        if (item.speedMul) {
+            this.player.speedPotionTime = item.duration;
+        }
+        if (item.armorAdd) {
+            this.player.armorBonus = item.armorAdd;
+            this.player.defensePotionTime = item.duration;
+        }
+        if (item.attackMul) {
+            this.player.ragePotionTime = item.duration;
+        }
+        if (item.spawnTurret) {
+            this.spawnTurret();
+        }
+        this.updateHUD();
+        this.renderShop();
+    }
+
+    applyCharacter() {
+        const p = this.player;
+        if (p.currentCharacter && CHARACTERS[p.currentCharacter]) {
+            const c = CHARACTERS[p.currentCharacter];
+            p.armor = c.armor;
+            p.maxHp = c.hp;
+            p.hp = c.hp;
+        } else {
+            p.armor = 0;
+            p.maxHp = 500;
+            p.hp = Math.min(p.hp, p.maxHp);
+        }
+    }
+
+    trySpecialWave() {
+        const p = this.player;
+        if (p.jCooldown > 0) return;
+
+        const weapon = p.weapon;
+        const isThunder = weapon === 'thunderHammer';
+        const isFire = weapon === 'flameAxe';
+        if (!isThunder && !isFire) return;
+
+        p.jCooldown = 5 * 60;
+        const range = 180;
+        const damage = 150;
+        const color = isThunder ? '#88f' : '#f44';
+        const effect = isThunder ? '#8ff' : '#f80';
+
+        this.npcs.forEach(npc => {
+            if (npc.ally) return;
+            const dist = npc.x - p.x;
+            const dirCheck = (dist > 0 && p.facing === 1) || (dist < 0 && p.facing === -1);
+            if (dirCheck && Math.abs(dist) < range) {
+                npc.hp -= damage;
+                npc.hitFlash = 10;
+                this.spawnParticles(npc.x, npc.y + 20, effect, 25);
+                if (isThunder) {
+                    npc.electricTime = Math.max(npc.electricTime || 0, 40);
+                }
+            }
+        });
+        this.spawnParticles(p.x + p.facing * 40, p.y + 20, color, 30);
+    }
+
+    spawnCharacterShockwaves() {
+        const p = this.player;
+        const isFire = p.currentCharacter === 'zhuRong';
+        const isThunder = p.currentCharacter === 'thor';
+        if (!isFire && !isThunder) return;
+
+        const damage = 200;
+        const color = isFire ? '#f60' : '#8ff';
+        const effect = isFire ? '#f80' : '#8ff';
+
+        const offsets = [-160, 160];
+        offsets.forEach(offset => {
+            const waveX = p.x + offset;
+            this.npcs.forEach(npc => {
+                if (npc.ally) return;
+                const dist = Math.abs(npc.x - waveX);
+                if (dist < 60) {
+                    npc.hp -= damage;
+                    npc.hitFlash = 12;
+                    if (isThunder) npc.electricTime = Math.max(npc.electricTime || 0, 50);
+                    this.spawnParticles(npc.x, npc.y + 20, effect, 30);
+                }
+            });
+            this.spawnParticles(waveX, p.y + 20, color, 25);
+        });
+    }
+
+    playerAttack() {
+        const p = this.player;
+        if (p.attackCooldown > 0 || p.isAttacking) return;
+        
+        p.isAttacking = true;
+        p.attackFrame = 0;
+        p.attackCombo = (p.attackCombo + 1) % 3; // 3段连招
+        p.attackCooldown = 15; // 冷却帧数
+        
+        // 攻击判定逻辑在 update 中处理
+        // 这里产生攻击特效
+        this.spawnParticles(p.x + p.facing * 30, p.y + 20, WEAPONS[p.weapon].color, 5);
+    }
+
+    spawnNPC() {
+        const diff = this.difficulty;
+        const maxN = CONFIG.maxNpcs[diff];
+        if (this.mushrooms.length > 0) return;
+        if (this.npcs.length >= maxN) return;
+
+        let typeKey = 'samurai';
+        const rand = Math.random();
+        
+        if (diff === 'medium') {
+            if (rand > 0.6) typeKey = 'samurai';
+            else if (rand > 0.25) typeKey = 'laser';
+        } else if (diff === 'hard') {
+            if (rand > 0.75) typeKey = 'wukong';
+            else if (rand > 0.55) typeKey = 'laser';
+        } else if (diff === 'crazy') {
+            if (rand > 0.92) typeKey = 'donquixote';
+            else if (rand > 0.82) typeKey = 'giant';
+            else if (rand > 0.7) typeKey = 'wukong';
+            else if (rand > 0.45) typeKey = 'rocket';
+            else if (rand > 0.2) typeKey = 'laser';
+        }
+
+        const type = ENEMY_TYPES[typeKey];
+        const side = Math.random() > 0.5 ? 1 : -1;
+        
+        this.npcs.push({
+            x: side === 1 ? -50 : this.canvas.width + 50,
+            y: CONFIG.groundY - type.h,
+            w: type.w,
+            h: type.h,
+            hp: type.hp,
+            maxHp: type.hp,
+            dmg: type.dmg,
+            speed: CONFIG.npcSpeed[diff] * type.speedMul,
+            color: type.color,
+            weapon: type.weapon,
+            type: typeKey,
+            isWukong: type.isWukong || false,
+            facing: 0, // 会在 update 中自动朝向玩家
+            animFrame: 0,
+            hitFlash: 0
+        });
+    }
+
+    spawnParticles(x, y, color, count) {
+        for(let i=0; i<count; i++) {
+            this.particles.push({
+                x, y,
+                vx: (Math.random()-0.5)*8,
+                vy: (Math.random()-0.5)*8,
+                life: 20,
+                color: color
+            });
+        }
+    }
+
+    spawnNukeDrop() {
+        const p = this.player;
+        this.nukes.push({
+            x: p.x,
+            y: -120,
+            vy: 0.8,
+            explosionHeight: CONFIG.groundY - 50,
+            exploded: false
+        });
+    }
+
+    spawnMushroomCloud(x, y) {
+        this.mushrooms.push({ x: this.canvas.width / 2, y: CONFIG.groundY - 120, life: 600, radiusX: this.canvas.width * 0.95, radiusY: this.canvas.height * 0.75 });
+        for (let i = 0; i < 180; i++) {
+            this.spawnParticles(this.canvas.width / 2 + (Math.random() - 0.5) * this.canvas.width, CONFIG.groundY - 120 - 40 + Math.random() * 120, '#f80', 4);
+        }
+    }
+
+    spawnLaserAlly() {
+        const p = this.player;
+        const type = ENEMY_TYPES.laser;
+        const sideX = p.x - 60;
+        this.npcs.push({
+            x: sideX,
+            y: CONFIG.groundY - type.h,
+            w: type.w,
+            h: type.h,
+            hp: type.hp,
+            maxHp: type.hp,
+            dmg: type.dmg,
+            speed: CONFIG.npcSpeed[this.difficulty] * type.speedMul,
+            color: type.color,
+            weapon: type.weapon,
+            type: 'laserAlly',
+            ally: true,
+            summoned: true,
+            animFrame: 0,
+            hitFlash: 0
+        });
+        this.spawnParticles(sideX, CONFIG.groundY - 30, '#0ff', 20);
+    }
+
+    spawnTurret() {
+        const p = this.player;
+        const x = Math.max(50, Math.min(this.canvas.width - 50, p.x + p.facing * 60));
+        const y = CONFIG.groundY;
+        this.turrets.push({ x: x, y: y, facing: p.facing, fireTimer: 0 });
+        this.spawnParticles(x, y - 10, '#a020f0', 20);
+    }
+
+    spawnThornWall(x) {
+        // 荆棘墙：x 为中心位置，宽度和持续时间固定
+        const width = 140;
+        const duration = 10 * 60; // 10秒
+        this.thornWalls.push({ x: x, w: width, y: CONFIG.groundY - 60, duration: duration });
+        this.spawnParticles(x, CONFIG.groundY - 30, '#0a0', 30);
+    }
+
+    spawnAlly() {
+        // 召唤一个盟友武士（靠近敌方并攻击）
+        const p = this.player;
+        const sideX = p.x - 60; // 生成在玩家左侧一点
+        this.npcs.push({
+            x: sideX,
+            y: CONFIG.groundY - 60,
+            w: 20,
+            h: 60,
+            hp: 100,
+            maxHp: 100,
+            dmg: ENEMY_TYPES.samurai.dmg,
+            speed: CONFIG.npcSpeed[this.difficulty] * ENEMY_TYPES.samurai.speedMul,
+            color: '#eee',
+            weapon: 'katana',
+            type: 'ally',
+            ally: true,
+            summoned: true,
+            animFrame: 0,
+            hitFlash: 0
+        });
+        this.spawnParticles(sideX, CONFIG.groundY - 30, '#eee', 20);
+    }
+
+    update() {
+        if (this.state !== 'PLAYING') return;
+
+        this.frameCount++;
+        const p = this.player;
+
+        // 玩家移动
+        const isMoving = this.keys['w'] || this.keys['s'];
+        let playerSpeed = CONFIG.playerSpeed;
+        if (p.equippedEquipment.includes('windFireWheel')) playerSpeed *= 1.5;
+        if (p.speedPotionTime > 0) playerSpeed *= 2;
+        if (this.keys['w']) p.x += playerSpeed * p.facing; // W 前进（按朝向）
+        if (this.keys['s']) p.x -= playerSpeed * p.facing; // S 后退
+        
+        // 边界限制
+        p.x = Math.max(20, Math.min(this.canvas.width - 20, p.x));
+        if (isMoving && p.equippedEquipment.includes('windFireWheel') && this.frameCount % 6 === 0) {
+            this.spawnParticles(p.x - 10, p.y + 45, '#f60', 2);
+            this.spawnParticles(p.x + 10, p.y + 45, '#f60', 2);
+        }
+        if (p.currentCharacter === 'zhuRong' && this.frameCount % 10 === 0) {
+            this.spawnParticles(p.x, p.y + 10, '#f80', 2);
+        }
+        if (p.currentCharacter === 'thor' && this.frameCount % 10 === 0) {
+            this.spawnParticles(p.x, p.y + 10, '#8ff', 2);
+        }
+        if (p.equippedEquipment.includes('medDrone') && this.frameCount % 120 === 0 && p.hp < p.maxHp) {
+            p.hp = Math.min(p.maxHp, p.hp + 1);
+        }
+        if (p.equippedEquipment.includes('laserDrone')) {
+            p.laserDroneTimer--;
+            if (p.laserDroneTimer <= 0) {
+                p.laserDroneTimer = 60;
+                const droneCount = Math.min(2, p.equippedEquipment.filter(k => k === 'laserDrone').length);
+                const positions = [{ x: p.x - 30, y: p.y - 20 }, { x: p.x + 30, y: p.y - 20 }];
+                for (let i = 0; i < droneCount; i++) {
+                    const target = this.npcs.reduce((best, npc) => {
+                        if (npc.ally) return best;
+                        const d = Math.abs(npc.x - p.x);
+                        return (!best || d < best.dist) ? { npc, dist: d } : best;
+                    }, null);
+                    if (!target) break;
+                    target.npc.hp -= 100;
+                    target.npc.hitFlash = 10;
+                    this.spawnParticles(target.npc.x, target.npc.y + 20, '#0ff', 12);
+                    this.laserBeams.push({ x1: positions[i].x, y1: positions[i].y, x2: target.npc.x, y2: target.npc.y + 20, life: 10 });
+                }
+            }
+        }
+
+        if (p.speedPotionTime > 0) {
+            p.speedPotionTime--;
+        }
+        if (p.defensePotionTime > 0) {
+            p.defensePotionTime--;
+            if (p.defensePotionTime <= 0) {
+                p.armorBonus = 0;
+            }
+        }
+        if (p.ragePotionTime > 0) {
+            p.ragePotionTime--;
+        }
+
+        // 攻击逻辑
+        if (p.attackCooldown > 0) p.attackCooldown--;
+        if (p.jCooldown > 0) p.jCooldown--;
+        if (p.characterTimer > 0) p.characterTimer--;
+        if (p.characterTimer <= 0) {
+            if (p.currentCharacter === 'zhuRong' || p.currentCharacter === 'thor') {
+                this.spawnCharacterShockwaves();
+            }
+            p.characterTimer = 20 * 60;
+        }
+        if (p.isAttacking) {
+            p.attackFrame++;
+            const wep = WEAPONS[p.weapon];
+
+            // 火尖枪（type === 'gun'）使用连续突刺：在攻击持续期内多次判定伤害，伴随伸缩效果
+            if (wep.type === 'gun') {
+                // 每隔若干帧触发一次判定
+                if (p.attackFrame % 3 === 0 && p.attackFrame <= 18) {
+                    // 伸缩长度（视觉与判定）
+                    const ext = 1 + 0.5 * Math.sin(p.attackFrame * 0.6);
+                    const range = (wep.range ?? wep.len) * ext + 20;
+                    let finalDmg = wep.dmg * 0.35; // 分多次命中，单次伤害较低
+
+                    // 连招加成
+                    if (p.attackCombo === 2) finalDmg *= 1.2;
+
+                    if (p.ragePotionTime > 0) {
+                        finalDmg *= 2;
+                    }
+
+                    if (p.currentCharacter && CHARACTERS[p.currentCharacter]) {
+                        const c = CHARACTERS[p.currentCharacter];
+                        if (c.weaponBoost && c.weaponBoost[p.weapon]) {
+                            finalDmg *= c.weaponBoost[p.weapon];
+                        }
+                        if (c.weaponBonus && c.weaponBonus[p.weapon]) {
+                            finalDmg += c.weaponBonus[p.weapon];
+                        }
+                    }
+
+                    this.npcs.forEach(npc => {
+                        const dist = Math.abs(npc.x - p.x);
+                        const dirCheck = (npc.x > p.x && p.facing === 1) || (npc.x < p.x && p.facing === -1);
+                        if (dist < range && dirCheck) {
+                            // 玩家攻击不应伤害被召唤出来的盟友单位
+                            if (npc.summoned) return;
+                            npc.hp -= finalDmg;
+                            npc.hitFlash = 5;
+                            this.spawnParticles(npc.x, npc.y + 20, '#fff', 3);
+                            if (p.equippedEquipment.includes('windFireWheel')) {
+                                this.spawnParticles(npc.x, npc.y + 20, '#f60', 10);
+                            }
+                            // 记录火尖枪命中次数以触发喷火（保留原逻辑）
+                            if (p.weapon === 'rocket' || p.weapon === 'dualRocket') {
+                                p.rocketHitCount += 1;
+                                if (p.rocketHitCount >= 10 && !p.rocketFlameReady) {
+                                    p.rocketFlameReady = true;
+                                    this.spawnParticles(npc.x, npc.y + 20, '#f60', 20);
+                                }
+                            }
+                            // 击退
+                            npc.x += p.facing * 8;
+                        }
+                    });
+                }
+
+                if (p.attackFrame > 20) p.isAttacking = false;
+            } else {
+                // 其他武器保持原有单次判定（第5帧）
+                if (p.attackFrame === 5) {
+                    const range = wep.range ?? (wep.len + 20);
+                    let finalDmg = wep.dmg;
+                    // 连招加成：第3段伤害+20%
+                    if (p.attackCombo === 2) finalDmg *= 1.2;
+                    if (p.ragePotionTime > 0) {
+                        finalDmg *= 2;
+                    }
+
+                    if (p.currentCharacter && CHARACTERS[p.currentCharacter]) {
+                        const c = CHARACTERS[p.currentCharacter];
+                        if (c.weaponBoost && c.weaponBoost[p.weapon]) {
+                            finalDmg *= c.weaponBoost[p.weapon];
+                        }
+                        if (c.weaponBonus && c.weaponBonus[p.weapon]) {
+                            finalDmg += c.weaponBonus[p.weapon];
+                        }
+                    }
+
+                    this.npcs.forEach(npc => {
+                        const dist = Math.abs(npc.x - p.x);
+                        const dirCheck = (npc.x > p.x && p.facing === 1) || (npc.x < p.x && p.facing === -1);
+                        if (dist < range && dirCheck) {
+                            // 玩家攻击不应伤害被召唤出来的盟友单位
+                            if (npc.summoned) return;
+                            npc.hp -= finalDmg;
+                            npc.hitFlash = 5;
+                            this.spawnParticles(npc.x, npc.y + 20, '#fff', 3);
+                            if (p.equippedEquipment.includes('windFireWheel')) {
+                                this.spawnParticles(npc.x, npc.y + 20, '#f60', 10);
+                            }
+                            if (p.weapon === 'flameAxe') {
+                                this.spawnParticles(npc.x, npc.y + 20, '#f80', 15);
+                            } else if (p.weapon === 'thunderHammer') {
+                                npc.electricTime = Math.max(npc.electricTime || 0, 50);
+                                this.spawnParticles(npc.x, npc.y + 20, '#8ff', 15);
+                            }
+                            // 老者使用激光棍时造成麻痹与雷电特效（持续效果）
+                            if (p.currentCharacter === 'oldMan' && WEAPONS[p.weapon] && WEAPONS[p.weapon].name === '激光棍') {
+                                npc.stun = 40;
+                                npc.electricTime = 60;
+                                this.spawnParticles(npc.x, npc.y + 20, '#0ff', 12);
+                            }
+                            // 火箭相关命中计数
+                            if (p.weapon === 'rocket' || p.weapon === 'dualRocket') {
+                                p.rocketHitCount += 1;
+                                if (p.rocketHitCount >= 10 && !p.rocketFlameReady) {
+                                    p.rocketFlameReady = true;
+                                    this.spawnParticles(npc.x, npc.y + 20, '#f60', 20);
+                                }
+                            }
+                            // 击退
+                            npc.x += p.facing * 10;
+                        }
+                    });
+                }
+
+                if (p.attackFrame > 15) p.isAttacking = false;
+            }
+        }
+
+        // 无敌帧
+        if (p.invincible > 0) p.invincible--;
+
+        // 核弹掉落与爆炸
+        for (let i = this.nukes.length - 1; i >= 0; i--) {
+            const nuke = this.nukes[i];
+            nuke.y += nuke.vy;
+            nuke.vy += 0.02;
+            this.spawnParticles(nuke.x, nuke.y + 20, '#f00', 2);
+            if (nuke.y >= nuke.explosionHeight && !nuke.exploded) {
+                nuke.exploded = true;
+                this.spawnMushroomCloud(nuke.x, nuke.y);
+                this.spawnParticles(nuke.x, nuke.y, '#f80', 80);
+                this.npcs.forEach(npc => {
+                    npc.hp = 0;
+                    npc.hitFlash = 20;
+                });
+                this.npcs = [];
+                this.nukes.splice(i, 1);
+            }
+        }
+
+        // 核弹蘑菇云持续时间
+        for (let i = this.mushrooms.length - 1; i >= 0; i--) {
+            const cloud = this.mushrooms[i];
+            cloud.life--;
+            if (cloud.life <= 0) {
+                this.mushrooms.splice(i, 1);
+            }
+        }
+
+        // 装备自动效果：荆棘权杖与召唤权杖计时
+        if (p.equippedEquipment.includes('thornStaff')) {
+            if (p.thornTimer > 0) p.thornTimer--;
+            if (p.thornTimer <= 0) {
+                // 在玩家前方生成荆棘墙
+                const wallX = p.x + p.facing * 160;
+                this.spawnThornWall(wallX);
+                p.thornTimer = 20 * 60; // 重置20秒
+            }
+        }
+        if (p.equippedEquipment.includes('summonStaff')) {
+            if (p.summonTimer > 0) p.summonTimer--;
+            if (p.summonTimer <= 0) {
+                this.spawnAlly();
+                p.summonTimer = 10 * 60; // 重置10秒
+            }
+        }
+        if (p.equippedEquipment.includes('superSummonStaff')) {
+            if (p.superSummonTimer > 0) p.superSummonTimer--;
+            if (p.superSummonTimer <= 0) {
+                this.spawnLaserAlly();
+                p.superSummonTimer = 5 * 60; // 重置5秒
+            }
+        }
+
+        // NPC 生成
+        if (this.frameCount % CONFIG.npcSpawnRate[this.difficulty] === 0) {
+            this.spawnNPC();
+        }
+
+        // 炮塔自动射击
+        for (let i = this.turrets.length - 1; i >= 0; i--) {
+            const turret = this.turrets[i];
+            turret.fireTimer--;
+            const target = this.npcs.reduce((best, npc) => {
+                if (npc.ally) return best;
+                const d = Math.abs(npc.x - turret.x);
+                return (!best || d < best.dist) ? { npc, dist: d } : best;
+            }, null);
+            if (target) {
+                turret.facing = target.npc.x < turret.x ? -1 : 1;
+            }
+            if (turret.fireTimer <= 0 && target) {
+                turret.fireTimer = 30;
+                for (let j = 0; j < 2; j++) {
+                    this.turretBullets.push({
+                        x: turret.x + turret.facing * 18,
+                        y: turret.y - 10 + j * 4,
+                        vx: turret.facing * 12,
+                        vy: 0,
+                        dmg: 20,
+                        life: 90
+                    });
+                }
+            }
+        }
+
+        for (let i = this.turretBullets.length - 1; i >= 0; i--) {
+            const bullet = this.turretBullets[i];
+            bullet.x += bullet.vx;
+            bullet.y += bullet.vy;
+            bullet.life--;
+            if (bullet.life <= 0 || bullet.x < -50 || bullet.x > this.canvas.width + 50) {
+                this.turretBullets.splice(i, 1);
+                continue;
+            }
+            for (let j = this.npcs.length - 1; j >= 0; j--) {
+                const npc = this.npcs[j];
+                if (npc.ally) continue;
+                const dx = Math.abs(npc.x - bullet.x);
+                const dy = Math.abs(npc.y + npc.h/2 - bullet.y);
+                if (dx < 18 && dy < 18) {
+                    npc.hp -= bullet.dmg;
+                    npc.hitFlash = 10;
+                    this.spawnParticles(npc.x, npc.y + 20, '#ffa500', 10);
+                    this.turretBullets.splice(i, 1);
+                    break;
+                }
+            }
+        }
+
+        // NPC 更新
+        for (let i = this.npcs.length - 1; i >= 0; i--) {
+            const npc = this.npcs[i];
+            
+            // 朝向玩家
+            npc.facing = npc.x < p.x ? 1 : -1;
+            
+            // 麻痹/电击状态处理
+            if (npc.stun > 0) {
+                npc.stun--;
+            }
+            if (npc.electricTime > 0) {
+                npc.electricTime--;
+                // 电击期间减速并显示电特效（粒子）
+                if (this.frameCount % 6 === 0) this.spawnParticles(npc.x, npc.y + 10, '#0ff', 4);
+            }
+
+            if (this.mushrooms.length > 0) {
+                npc.hp = 0;
+                npc.hitFlash = 20;
+                continue;
+            }
+
+            // 盟友行为：寻找最近的非盟友敌人并攻击（保持原始行为）
+            if (npc.ally) {
+                // 找到最近的非盟友敌人
+                let target = null;
+                let bestDist = Infinity;
+                for (const e of this.npcs) {
+                    if (!e.ally && e !== npc) {
+                        const d = Math.abs(e.x - npc.x);
+                        if (d < bestDist) { bestDist = d; target = e; }
+                    }
+                }
+
+                if (target) {
+                    // 向目标移动
+                    if (bestDist > 40) {
+                        const speedMul = npc.electricTime > 0 ? 0.5 : 1;
+                        npc.x += (target.x < npc.x ? -1 : 1) * npc.speed * speedMul;
+                    } else {
+                        // 攻击目标
+                        if (this.frameCount % 60 === 0) {
+                            target.hp -= ENEMY_TYPES.samurai.dmg;
+                            target.hitFlash = 8;
+                            this.spawnParticles(target.x, target.y + 20, '#eee', 6);
+                        }
+                    }
+                }
+            } else {
+                // 非盟友（敌人）行为：选择最近的目标（玩家或友方NPC），并尝试接近或攻击
+                if (npc.stun > 0) {
+                    // 被麻痹时不移动
+                } else {
+                    let target = { type: 'player', x: p.x, y: p.y, obj: p };
+                    let bestDist = Math.abs(npc.x - p.x);
+
+                    for (const e of this.npcs) {
+                        if (e.ally && e !== npc) {
+                            const d = Math.abs(e.x - npc.x);
+                            if (d < bestDist) {
+                                bestDist = d;
+                                target = { type: 'ally', x: e.x, y: e.y, obj: e };
+                            }
+                        }
+                    }
+
+                    // 先朝向目标
+                    npc.facing = npc.x < target.x ? 1 : -1;
+
+                    // 检查荆棘墙阻挡：如果墙在 NPC 与目标之间且 NPC 不是盟友，则阻挡并每秒扣血
+                    let blocked = false;
+                    for (const wall of this.thornWalls) {
+                        const wallLeft = wall.x - wall.w/2;
+                        const wallRight = wall.x + wall.w/2;
+                        const between = (npc.x < wall.x && target.x > wall.x) || (npc.x > wall.x && target.x < wall.x);
+                        if (between && npc.x > wallLeft - 10 && npc.x < wallRight + 10) {
+                            blocked = true;
+                            if (this.frameCount % 60 === 0) {
+                                npc.hp -= 20;
+                                npc.hitFlash = 6;
+                                this.spawnParticles(npc.x, npc.y + 20, '#0a0', 6);
+                            }
+                            break;
+                        }
+                    }
+
+                    if (blocked) {
+                        // 被荆棘阻挡则停住不前进
+                    } else if (bestDist > 40) {
+                        const speedMul = npc.electricTime > 0 ? 0.5 : 1;
+                        npc.x += npc.facing * npc.speed * speedMul;
+                    } else {
+                        // 攻击目标：可能是玩家或友方NPC
+                        if (this.frameCount % 60 === 0) {
+                            const weaponDmg = WEAPONS[npc.weapon]?.dmg ?? npc.dmg;
+                            let dmg = Math.max(1, Math.floor(weaponDmg / 5));
+
+                            if (target.type === 'player') {
+                                if (p.invincible > 0) return;
+
+                                const effectivePlayerArmor = (p.armor >= 1) ? (p.armor / 100) : p.armor;
+                                let vineArmorMul = p.equippedEquipment.includes('vineArmor') ? (EQUIPMENT.vineArmor.armorMul || 0) : 0;
+                                vineArmorMul = (vineArmorMul >= 1) ? (vineArmorMul / 100) : vineArmorMul;
+                                const bonusArmor = p.defensePotionTime > 0 ? p.armorBonus : 0;
+
+                                dmg = Math.max(1, Math.floor(dmg * (1 - effectivePlayerArmor - vineArmorMul - bonusArmor)));
+                                if (p.equippedEquipment.includes('vineArmor') && npc.weapon === 'rocket') {
+                                    dmg = Math.max(1, Math.floor(dmg * 1.25));
+                                }
+
+                                p.hp -= dmg;
+                                p.invincible = 30;
+                                this.spawnParticles(p.x, p.y + 20, '#f00', 8);
+                                if (p.equippedEquipment.includes('windFireWheel')) {
+                                    npc.hp -= EQUIPMENT.windFireWheel.fireDamage;
+                                    npc.hitFlash = 10;
+                                    this.spawnParticles(npc.x, npc.y + 20, '#f60', 12);
+                                }
+                                this.updateHUD();
+                                if (p.hp <= 0) {
+                                    p.hp = 0;
+                                    this.die();
+                                }
+                            } else {
+                                const ally = target.obj;
+                                ally.hp -= dmg;
+                                ally.hitFlash = 8;
+                                this.spawnParticles(ally.x, ally.y + 20, '#eee', 8);
+                                if (p.equippedEquipment.includes('windFireWheel')) {
+                                    npc.hp -= EQUIPMENT.windFireWheel.fireDamage;
+                                    npc.hitFlash = 10;
+                                    this.spawnParticles(npc.x, npc.y + 20, '#f60', 12);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 死亡判定
+            if (npc.hp <= 0) {
+                const dropGold = npc.type === 'laser' ? 300 : npc.type === 'rocket' ? 500 : npc.type === 'wukong' ? 750 : 200;
+                this.gold += dropGold;
+                this.spawnParticles(npc.x, npc.y + 20, npc.color, 15);
+                // 增加击杀计数
+                this.killCount = (this.killCount || 0) + 1;
+                this.npcs.splice(i, 1);
+                this.updateHUD();
+            }
+            
+            // 动画帧
+            npc.animFrame++;
+            if (npc.hitFlash > 0) npc.hitFlash--;
+        }
+
+        // 粒子更新
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const pt = this.particles[i];
+            pt.x += pt.vx;
+            pt.y += pt.vy;
+            pt.life--;
+            if (pt.life <= 0) this.particles.splice(i, 1);
+        }
+
+        // 荆棘墙持续时间更新并移除过期
+        for (let i = this.thornWalls.length - 1; i >= 0; i--) {
+            const wall = this.thornWalls[i];
+            wall.duration--;
+            if (wall.duration <= 0) this.thornWalls.splice(i, 1);
+        }
+    }
+
+    updateHUD() {
+        document.getElementById('goldDisplay').innerText = this.gold;
+        document.getElementById('killDisplay').innerText = this.killCount || 0;
+        document.getElementById('hpDisplay').innerText = Math.max(0, Math.floor(this.player.hp));
+        document.getElementById('maxHpDisplay').innerText = Math.max(0, Math.floor(this.player.maxHp));
+        document.getElementById('weaponDisplay').innerText = WEAPONS[this.player.weapon].name;
+        document.getElementById('roleDisplay').innerText = this.player.currentCharacter ? CHARACTERS[this.player.currentCharacter].name : '无';
+        const equippedNames = this.player.equippedEquipment.map(key => EQUIPMENT[key].name).join('，') || '无';
+        document.getElementById('equipmentDisplay').innerText = equippedNames;
+        document.getElementById('controlsHint').innerText = this.player.rocketFlameReady ? 'W/S: 移动 | A: 攻击连招 | J: 释放火焰 | Q: 转身 | ESC: 商城' : 'W/S: 移动 | A: 攻击连招 | J: 火焰释放 | Q: 转身 | ESC: 商城';
+    }
+
+    draw() {
+        const ctx = this.ctx;
+        const W = this.canvas.width;
+        const H = this.canvas.height;
+        
+        // 清空画布
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, W, H);
+        
+        // 画地面
+        ctx.fillStyle = '#333';
+        ctx.fillRect(0, CONFIG.groundY, W, H - CONFIG.groundY);
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, CONFIG.groundY);
+        ctx.lineTo(W, CONFIG.groundY);
+        ctx.stroke();
+
+        if (this.state === 'MENU' || this.state === 'DEAD') return;
+
+        // 画粒子
+        this.particles.forEach(pt => {
+            ctx.globalAlpha = pt.life / 20;
+            ctx.fillStyle = pt.color;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+
+        // 画荆棘墙
+        this.thornWalls.forEach(wall => {
+            ctx.save();
+            ctx.fillStyle = 'rgba(10,120,10,0.9)';
+            ctx.fillRect(wall.x - wall.w/2, wall.y, wall.w, 60);
+            // 绘制一些荆棘尖
+            ctx.fillStyle = '#083';
+            for (let sx = wall.x - wall.w/2; sx < wall.x + wall.w/2; sx += 12) {
+                ctx.beginPath();
+                ctx.moveTo(sx, wall.y);
+                ctx.lineTo(sx + 6, wall.y - 12);
+                ctx.lineTo(sx + 12, wall.y);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        });
+
+        // 画核弹坠落
+        this.nukes.forEach(nuke => {
+            ctx.save();
+            ctx.fillStyle = '#f66';
+            ctx.beginPath();
+            ctx.ellipse(nuke.x, nuke.y, 16, 24, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(nuke.x - 4, nuke.y - 10, 8, 12);
+            ctx.restore();
+        });
+
+        // 画蘑菇云
+        this.mushrooms.forEach(cloud => {
+            const alpha = cloud.life / 600;
+            ctx.save();
+            ctx.globalAlpha = alpha * 0.8;
+            ctx.fillStyle = '#f80';
+            ctx.beginPath();
+            ctx.ellipse(cloud.x, cloud.y, cloud.radiusX, cloud.radiusY, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffb800';
+            ctx.beginPath();
+            ctx.ellipse(cloud.x, cloud.y - cloud.radiusY * 0.25, cloud.radiusX * 0.9, cloud.radiusY * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        // 画激光无人机激光束
+        for (let i = this.laserBeams.length - 1; i >= 0; i--) {
+            const beam = this.laserBeams[i];
+            const alpha = beam.life / 10;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = '#0ff';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(beam.x1, beam.y1);
+            ctx.lineTo(beam.x2, beam.y2);
+            ctx.stroke();
+            ctx.restore();
+            beam.life--;
+            if (beam.life <= 0) this.laserBeams.splice(i, 1);
+        }
+
+        // 画炮塔
+        this.turrets.forEach(turret => {
+            ctx.save();
+            ctx.translate(turret.x, turret.y);
+            ctx.scale(turret.facing, 1);
+            // 支架
+            ctx.fillStyle = '#d17300';
+            ctx.fillRect(-22, 0, 8, 20);
+            ctx.fillRect(14, 0, 8, 20);
+            // 炮体
+            ctx.fillStyle = '#ff9f33';
+            ctx.beginPath();
+            ctx.arc(0, -10, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffa847';
+            ctx.beginPath();
+            ctx.arc(0, -14, 10, 0, Math.PI * 2);
+            ctx.fill();
+            // 炮管
+            ctx.fillStyle = '#bf7c00';
+            ctx.fillRect(10, -16, 30, 8);
+            ctx.restore();
+        });
+
+        // 画炮塔子弹
+        this.turretBullets.forEach(bullet => {
+            ctx.save();
+            ctx.globalAlpha = 0.9;
+            ctx.fillStyle = '#ffa500';
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        // 画NPC
+        this.npcs.forEach(npc => {
+            // 如果是被召唤的单位，在头顶绘制倒三角标记
+            if (npc.summoned) {
+                ctx.save();
+                ctx.fillStyle = '#00aaff';
+                ctx.beginPath();
+                ctx.moveTo(npc.x, npc.y - 30); // 顶部位置
+                ctx.lineTo(npc.x - 8, npc.y - 18);
+                ctx.lineTo(npc.x + 8, npc.y - 18);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+            this.drawStickman(npc.x, npc.y, npc.facing, npc.color, npc.weapon, npc.animFrame, npc.hitFlash > 0, npc.isWukong);
+            // 血条
+            ctx.fillStyle = '#500';
+            ctx.fillRect(npc.x - 20, npc.y - 15, 40, 5);
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(npc.x - 20, npc.y - 15, 40 * (npc.hp / npc.maxHp), 5);
+        });
+
+        // 画玩家
+        const p = this.player;
+        // 无敌闪烁
+        if (p.invincible > 0 && Math.floor(this.frameCount / 4) % 2 === 0) {
+            ctx.globalAlpha = 0.4;
+        }
+        const playerColor = p.currentCharacter === 'oldMan' ? '#2196F3' : p.currentCharacter === 'nezha' ? '#F44336' : p.currentCharacter === 'wukong' ? '#FFEB3B' : '#4CAF50';
+        this.drawStickman(p.x, p.y, p.facing, playerColor, p.weapon, p.isAttacking ? p.attackFrame : 0, false, false, p.isAttacking, p.attackCombo, p.currentCharacter, p.equippedEquipment);
+        ctx.globalAlpha = 1;
+    }
+
+    drawStickman(x, y, facing, color, weaponKey, animFrame, isHit, isWukong, isAttacking = false, combo = 0, character = null, equipment = []) {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(facing, 1); // 翻转朝向
+        
+        // 受击变白
+        const c = isHit ? '#fff' : color;
+        ctx.strokeStyle = c;
+        ctx.fillStyle = c;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // 风火轮装备：脚底两圈特效
+        if (equipment.includes('windFireWheel')) {
+            ctx.strokeStyle = '#f60';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(-10, 65, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(10, 65, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = c;
+            ctx.lineWidth = 3;
+        }
+
+        // 医疗无人机跟随
+        if (equipment.includes('medDrone')) {
+            ctx.fillStyle = '#6EF5A6';
+            ctx.beginPath();
+            ctx.arc(18, -10, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(18, -4);
+            ctx.lineTo(18, 2);
+            ctx.moveTo(12, -10);
+            ctx.lineTo(24, -10);
+            ctx.stroke();
+            ctx.fillStyle = c;
+            ctx.strokeStyle = c;
+            ctx.lineWidth = 3;
+        }
+        if (equipment.includes('laserDrone')) {
+            const droneCount = Math.min(2, equipment.filter(k => k === 'laserDrone').length);
+            const positions = [{ x: -30, y: -20 }, { x: 30, y: -20 }].slice(0, droneCount);
+            positions.forEach(pos => {
+                ctx.fillStyle = '#0ff';
+                ctx.strokeStyle = '#8ff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(pos.x - 4, pos.y);
+                ctx.lineTo(pos.x + 4, pos.y);
+                ctx.moveTo(pos.x, pos.y - 4);
+                ctx.lineTo(pos.x, pos.y + 4);
+                ctx.stroke();
+            });
+            ctx.fillStyle = c;
+            ctx.strokeStyle = c;
+            ctx.lineWidth = 3;
+        }
+
+        // 头
+        ctx.beginPath();
+        ctx.arc(0, 10, 10, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 角色头饰
+        if (character === 'oldMan') {
+            ctx.fillStyle = '#8D6E63';
+            ctx.beginPath();
+            ctx.moveTo(-14, 0);
+            ctx.lineTo(0, -12);
+            ctx.lineTo(14, 0);
+            ctx.closePath();
+            ctx.fill();
+        } else if (character === 'wukong') {
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 6, 12, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = c;
+            ctx.lineWidth = 3;
+        }
+
+        // 身体
+        ctx.beginPath();
+        ctx.moveTo(0, 20);
+        ctx.lineTo(0, 45);
+        ctx.stroke();
+
+        // 腿 (简单走路动画)
+        const legSwing = Math.sin(animFrame * 0.2) * 10;
+        ctx.beginPath();
+        ctx.moveTo(0, 45);
+        ctx.lineTo(-10 + legSwing, 60);
+        ctx.moveTo(0, 45);
+        ctx.lineTo(10 - legSwing, 60);
+        ctx.stroke();
+
+        // 武器与手臂
+        const wep = WEAPONS[weaponKey] || WEAPONS.dagger;
+        let armAngle = 0;
+        if (isAttacking) {
+            // 连招动画：根据 combo 改变角度
+            if (combo === 0) armAngle = -Math.PI / 4 - (animFrame / 15) * Math.PI;
+            else if (combo === 1) armAngle = Math.PI / 4 + (animFrame / 15) * Math.PI;
+            else armAngle = -Math.PI / 2 - (animFrame / 15) * Math.PI;
+        }
+
+        // 发光效果 (激光)
+        if (wep.glow) {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = wep.color;
+        }
+
+        // 画主手武器
+        ctx.save();
+        ctx.translate(0, 25);
+        ctx.rotate(armAngle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        // 如果是火尖枪，绘制枪尖和红缨
+        if (wep.type === 'gun') {
+            // 枪身
+            ctx.lineTo(wep.len, 0);
+            ctx.strokeStyle = wep.color;
+            ctx.lineWidth = 6;
+            ctx.stroke();
+            // 枪尖
+            ctx.beginPath();
+            ctx.moveTo(wep.len, 0);
+            ctx.lineTo(wep.len + 10, -6);
+            ctx.lineTo(wep.len + 10, 6);
+            ctx.closePath();
+            ctx.fillStyle = '#aaa';
+            ctx.fill();
+            // 红缨（枪尖下）
+            ctx.beginPath();
+            ctx.strokeStyle = '#f33';
+            ctx.lineWidth = 2;
+            ctx.moveTo(wep.len + 4, 6);
+            ctx.lineTo(wep.len + 16, 16);
+            ctx.moveTo(wep.len + 1, 6);
+            ctx.lineTo(wep.len + 11, 18);
+            ctx.moveTo(wep.len + 7, 6);
+            ctx.lineTo(wep.len + 17, 14);
+            ctx.stroke();
+        } else if (wep.type === 'thunder') {
+            const handleLen = wep.len * 0.4;
+            ctx.strokeStyle = '#554';
+            ctx.lineWidth = 8;
+            ctx.lineTo(handleLen, 0);
+            ctx.stroke();
+            const headX = handleLen;
+            ctx.fillStyle = wep.color;
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.rect(headX, -16, 32, 32);
+            ctx.fill();
+            ctx.stroke();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(headX + 6, -10);
+            ctx.lineTo(headX + 14, 0);
+            ctx.lineTo(headX + 10, 0);
+            ctx.lineTo(headX + 18, 12);
+            ctx.stroke();
+        } else if (wep.type === 'fire') {
+            const handleLen = wep.len * 0.35;
+            ctx.strokeStyle = '#552200';
+            ctx.lineWidth = 6;
+            ctx.lineTo(handleLen, 0);
+            ctx.stroke();
+            const headX = handleLen;
+            ctx.fillStyle = wep.color;
+            ctx.strokeStyle = '#640000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(headX, -6);
+            ctx.lineTo(headX + 24, -18);
+            ctx.lineTo(headX + 36, -18);
+            ctx.lineTo(headX + 26, -8);
+            ctx.lineTo(headX, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(headX, 6);
+            ctx.lineTo(headX + 24, 18);
+            ctx.lineTo(headX + 36, 18);
+            ctx.lineTo(headX + 26, 8);
+            ctx.lineTo(headX, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#ffcf99';
+            ctx.beginPath();
+            ctx.moveTo(headX + 10, -10);
+            ctx.lineTo(headX + 20, -2);
+            ctx.lineTo(headX + 14, 0);
+            ctx.lineTo(headX + 24, 10);
+            ctx.lineTo(headX + 16, 6);
+            ctx.closePath();
+            ctx.fill();
+        } else {
+            ctx.lineTo(wep.len, 0);
+            ctx.strokeStyle = wep.color;
+            ctx.lineWidth = wep.type === 'staff' ? 6 : 4;
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // 画副手武器 (原为双持逻辑，已改为单持激光棍)
+        if (wep.dual) {
+            ctx.save();
+            ctx.translate(0, 30);
+            ctx.rotate(armAngle + 0.5);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(wep.len * 0.8, 0);
+            ctx.strokeStyle = wep.color;
+            ctx.lineWidth = wep.type === 'staff' ? 6 : 4;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        ctx.shadowBlur = 0;
+        // 老者使用激光棍时：在武器上持续绘制蓝色雷电特效
+        if (character === 'oldMan' && WEAPONS[weaponKey] && WEAPONS[weaponKey].name === '激光棍') {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(facing, 1);
+            ctx.translate(0, 25);
+            ctx.rotate(armAngle);
+            // 绘制几条抖动的蓝色闪电线
+            ctx.strokeStyle = '#0ff';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#0ff';
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath();
+                const offsetY = (i - 2) * 3;
+                let sx = 10 + i * 8;
+                ctx.moveTo(sx, offsetY);
+                for (let px = sx + 6; px < WEAPONS[weaponKey].len; px += 8) {
+                    const py = offsetY + (Math.random() - 0.5) * 8;
+                    ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+            }
+            ctx.shadowBlur = 0;
+            ctx.restore();
+        }
+        ctx.restore();
+    }
+
+
+    loop() {
+        this.update();
+        this.draw();
+        requestAnimationFrame(() => this.loop());
+    }
+}
+
+// 启动游戏
+const game = new Game();
+</script>
+</body>
+</html>
