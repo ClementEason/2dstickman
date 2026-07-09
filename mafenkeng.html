@@ -293,9 +293,68 @@ class Game {
         this.npcs = [];
         this.particles = [];
         this.keys = {};
+        this.audioContext = null;
         
         this.initInput();
         this.loop();
+    }
+
+    ensureAudioContext() {
+        if (!window.AudioContext && !window.webkitAudioContext) return null;
+        if (!this.audioContext) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.audioContext = new AudioContext();
+        }
+        if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => {});
+        }
+        return this.audioContext;
+    }
+
+    playSound(effect) {
+        const ac = this.ensureAudioContext();
+        if (!ac) return;
+        const now = ac.currentTime;
+        const gain = ac.createGain();
+        const osc = ac.createOscillator();
+        let duration = 0.15;
+
+        if (effect === 'hit') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(700, now);
+            osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+            duration = 0.14;
+        } else if (effect === 'laserDrone') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(1500, now);
+            osc.frequency.linearRampToValueAtTime(1200, now + 0.12);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+            duration = 0.18;
+        } else if (effect === 'nuke') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.exponentialRampToValueAtTime(45, now + 0.25);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.28, now + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+            duration = 0.3;
+        } else {
+            return;
+        }
+
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.start(now);
+        osc.stop(now + duration);
+        osc.onended = () => {
+            gain.disconnect();
+            osc.disconnect();
+        };
     }
 
     resize() {
@@ -929,6 +988,7 @@ class Game {
                     target.npc.hp -= 100;
                     target.npc.hitFlash = 10;
                     this.spawnParticles(target.npc.x, target.npc.y + 20, '#0ff', 12);
+                    this.playSound('laserDrone');
                     this.laserBeams.push({ x1: positions[i].x, y1: positions[i].y, x2: target.npc.x, y2: target.npc.y + 20, life: 10 });
                 }
             }
@@ -999,6 +1059,7 @@ class Game {
                             if (p.equippedEquipment.includes('windFireWheel')) {
                                 this.spawnParticles(npc.x, npc.y + 20, '#f60', 10);
                             }
+                            this.playSound('hit');
                             // 记录火尖枪命中次数以触发喷火（保留原逻辑）
                             if (p.weapon === 'rocket' || p.weapon === 'dualRocket') {
                                 p.rocketHitCount += 1;
@@ -1047,6 +1108,7 @@ class Game {
                             if (p.equippedEquipment.includes('windFireWheel')) {
                                 this.spawnParticles(npc.x, npc.y + 20, '#f60', 10);
                             }
+                            this.playSound('hit');
                             if (p.weapon === 'flameAxe') {
                                 this.spawnParticles(npc.x, npc.y + 20, '#f80', 15);
                             } else if (p.weapon === 'thunderHammer') {
@@ -1089,6 +1151,7 @@ class Game {
             if (nuke.y >= nuke.explosionHeight && !nuke.exploded) {
                 nuke.exploded = true;
                 this.spawnMushroomCloud(nuke.x, nuke.y);
+                this.playSound('nuke');
                 this.spawnParticles(nuke.x, nuke.y, '#f80', 80);
                 this.npcs.forEach(npc => {
                     npc.hp = 0;
