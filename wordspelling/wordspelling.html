@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌟 单词默写大挑战 Pro 🌟</title>
+    <style>
+        :root {
+            --primary-color: #6c5ce7;
+            --secondary-color: #00b894;
+            --danger-color: #ff7675;
+            --bg-color: #f0f3f8;
+            --card-bg: #ffffff;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(#dfe6e9 1px, transparent 1px);
+            background-size: 20px 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: #2d3436;
+            overflow-x: hidden;
+        }
+
+        .container {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 600px;
+            border-radius: 24px;
+            box-shadow: 0 10px 30px rgba(108, 92, 231, 0.15);
+            padding: 30px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            font-size: 1.8rem;
+            text-shadow: 2px 2px 0px rgba(108, 92, 231, 0.1);
+        }
+
+        .view { display: none; animation: fadeIn 0.5s ease; }
+        .view.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 表单样式 */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #636e72; }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dfe6e9;
+            border-radius: 12px;
+            font-size: 1rem;
+            outline: none;
+            transition: border 0.3s;
+            background: white;
+        }
+        input:focus, select:focus { border-color: var(--primary-color); }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(45deg, var(--primary-color), #a29bfe);
+            color: white;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(108, 92, 231, 0.4); }
+        .btn:active { transform: translateY(0); }
+        .btn-secondary { background: linear-gradient(45deg, var(--secondary-color), #55efc4); margin-top: 10px;}
+        .btn-danger { background: linear-gradient(45deg, var(--danger-color), #fab1a0); margin-top: 10px;}
+        .btn-outline { background: white; border: 2px solid var(--primary-color); color: var(--primary-color); margin-top: 10px;}
+
+        /* 默写区域 */
+        .quiz-item {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .quiz-num { 
+            background: var(--primary-color); 
+            color: white; 
+            width: 30px; 
+            height: 30px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+        .quiz-cn { flex: 1; font-size: 1.1rem; }
+        
+        /* 提示与输入框样式 */
+        .input-group { display: flex; align-items: center; gap: 5px; }
+        .hint-btn {
+            background: none; border: none; font-size: 1.2rem; cursor: pointer;
+            transition: transform 0.2s; padding: 5px;
+        }
+        .hint-btn:hover { transform: scale(1.2); }
+        .hint-text {
+            font-size: 0.8rem; color: #e17055; background: #ffeaa7;
+            padding: 2px 6px; border-radius: 4px; display: none;
+        }
+        .quiz-input { 
+            width: 160px; 
+            text-align: center; 
+            font-weight: bold; 
+            letter-spacing: 1px; 
+        }
+
+        /* 结果页 */
+        .score-board {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #ffeaa7, #fdcb6e);
+            border-radius: 16px;
+            margin-bottom: 20px;
+        }
+        .score-num { font-size: 3rem; color: #d35400; line-height: 1; }
+        .score-label { font-size: 1rem; color: #e17055; }
+
+        .result-list { max-height: 200px; overflow-y: auto; margin-bottom: 15px; }
+        .result-item { 
+            padding: 8px; 
+            border-bottom: 1px dashed #dfe6e9; 
+            display: flex; 
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+        .wrong { color: var(--danger-color); font-weight: bold; }
+        .correct { color: var(--secondary-color); }
+
+        /* 排行榜 & 错题本 */
+        .tabs { display: flex; gap: 10px; margin-bottom: 15px; }
+        .tab-btn { 
+            flex: 1; 
+            padding: 10px; 
+            border: none; 
+            background: #dfe6e9; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .tab-btn.active { background: var(--primary-color); color: white; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { color: #636e72; }
+        .rank-1 { color: #f1c40f; font-weight: bold; }
+        .rank-2 { color: #bdc3c7; font-weight: bold; }
+        .rank-3 { color: #e67e22; font-weight: bold; }
+
+        .mistake-word, .mastered-word { 
+            display: inline-block; 
+            padding: 4px 10px; 
+            border-radius: 20px; 
+            margin: 4px; 
+            font-size: 0.85rem; 
+        }
+        .mistake-word { background: #ffeaa7; }
+        .mastered-word { background: #55efc4; color: #006266; }
+
+        /* 装饰性背景星星 */
+        .bg-star {
+            position: fixed;
+            font-size: 20px;
+            opacity: 0.1;
+            animation: float 6s infinite ease-in-out;
+            pointer-events: none;
+            z-index: 1;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(180deg); }
+        }
+
+        /* 提交时的星星特效 */
+        .celebration-star {
+            position: fixed;
+            pointer-events: none;
+            font-size: 24px;
+            z-index: 9999;
+            animation: star-fly 1s ease-out forwards;
+        }
+        @keyframes star-fly {
+            0% { opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0) rotate(360deg); }
+        }
+
+        /* 响应式 */
+        @media (max-width: 480px) {
+            .quiz-input { width: 120px; font-size: 0.9rem; }
+            h1 { font-size: 1.5rem; }
+            .container { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 背景装饰 -->
+    <div class="bg-star" style="top: 10%; left: 5%;">⭐</div>
+    <div class="bg-star" style="top: 20%; right: 10%; animation-delay: 1s;">✨</div>
+    <div class="bg-star" style="bottom: 15%; left: 15%; animation-delay: 2s;">🌟</div>
+    <div class="bg-star" style="bottom: 30%; right: 5%; animation-delay: 0.5s;">⭐</div>
+
+    <div class="container">
+        <!-- 1. 开始界面 -->
+        <div id="view-start" class="view active">
+            <h1>📝 单词默写大挑战 Pro</h1>
+            <div class="form-group">
+                <label>👋 你的名字是？</label>
+                <input type="text" id="playerName" placeholder="输入昵称开始冒险..." maxlength="10">
+            </div>
+            <div class="form-group">
+                <label>📚 选择单词库</label>
+                <select id="unitSelect">
+                    <option value="all">全部单元 (综合复习)</option>
+                    <option value="unit1">Unit 1: Growing Up & Technology</option>
+                    <option value="unit2">Unit 2: Dealing with Fears & Emotions</option>
+                    <option value="unit3">Unit 3: Careers & Services/option>
+                    <option value="unit4">Unit 4: Smart Homes & Daily Life</option>
+                    <option value="unit5">Unit 5: Films & Entertainment</option>
+                    <option value="unit6">Unit 6: Places & Environment</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>🎯 挑战几个单词？(1-20)</label>
+                <input type="number" id="wordCount" value="10" min="1" max="20">
+            </div>
+            <button class="btn" onclick="startQuiz()">🚀 开始挑战</button>
+            <button class="btn btn-secondary" onclick="showView('view-stats')">🏆 排行榜 / 个人中心</button>
+        </div>
+
+        <!-- 2. 默写界面 -->
+        <div id="view-quiz" class="view">
+            <h1>✍️ 正在默写...</h1>
+            <p style="text-align:center; color:#aaa; font-size:0.8rem; margin-bottom:10px;">💡 提示：按 Enter 键可自动跳到下一题；卡壳时点击灯泡看音标！</p>
+            <div id="quizContainer" style="margin-bottom: 20px;"></div>
+            <button class="btn" onclick="submitQuiz()">✅ 提交答案</button>
+        </div>
+
+        <!-- 3. 结果界面 -->
+        <div id="view-result" class="view">
+            <h1>🎉 挑战完成！</h1>
+            <div class="score-board">
+                <div class="score-num" id="finalScore">0</div>
+                <div class="score-label">最终得分</div>
+            </div>
+            <div id="resultDetails" class="result-list"></div>
+            <button class="btn" onclick="showView('view-start')">🏠 返回首页</button>
+            <button class="btn btn-secondary" onclick="showView('view-stats')">📊 查看进度/排行</button>
+        </div>
+
+        <!-- 4. 统计界面 -->
+        <div id="view-stats" class="view">
+            <h1>📊 个人中心</h1>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('leaderboard', this)">🏆 排行榜</button>
+                <button class="tab-btn" onclick="switchTab('mistakes', this)">📕 错题本</button>
+                <button class="tab-btn" onclick="switchTab('mastered', this)">✅ 已掌握</button>
+            </div>
+            
+            <div id="tab-leaderboard" class="tab-content">
+                <table>
+                    <thead><tr><th>排名</th><th>勇士</th><th>得分</th><th>题数</th></tr></thead>
+                    <tbody id="leaderboardBody"></tbody>
+                </table>
+            </div>
+
+            <div id="tab-mistakes" class="tab-content" style="display:none;">
+                <div id="mistakesList" style="margin-bottom: 15px; min-height: 50px;"></div>
+                <button class="btn btn-danger" onclick="clearMistakes()">🗑️ 清空错题本</button>
+            </div>
+
+            <div id="tab-mastered" class="tab-content" style="display:none;">
+                <div id="masteredList" style="margin-bottom: 15px; min-height: 50px;"></div>
+                <button class="btn btn-danger" onclick="clearMastered()">🔄 重置已掌握单词</button>
+            </div>
+
+            <button class="btn btn-secondary" style="margin-top:20px;" onclick="showView('view-start')">🔙 返回</button>
+        </div>
+    </div>
+
+<script>
+    // 1. 内置词库 (包含音标 ph 字段，请在此处替换PDF中的真实单词)
+    const WORD_BANK = {
+    unit1: [
+        {cn: "好奇的", en: "curious", ph: "/'kjʊəriəs/"},
+        {cn: "杂志", en: "magazine", ph: "/ˌmægə'zi:n/"},
+        {cn: "测试；检测", en: "test", ph: "/test/"},
+        {cn: "做帆板运动", en: "windsurf", ph: "/'wɪndsɜːf/"},
+        {cn: "感受", en: "feeling", ph: "/'fi:lɪŋ/"}, // 修正了转义
+        {cn: "勇敢的", en: "brave", ph: "/breɪv/"},
+        {cn: "挑战", en: "challenge", ph: "/'tʃælɪndʒ/"},
+        {cn: "机器", en: "machine", ph: "/mə'ʃi:n/"},
+        {cn: "交通", en: "traffic", ph: "/'træfik/"},
+        {cn: "板", en: "board", ph: "/bɔ:d/"},
+        {cn: "打印", en: "print", ph: "/prɪnt/"},
+        {cn: "印刷；打印", en: "printing", ph: "/'prɪntɪŋ/"},
+        {cn: "改善；改进", en: "improve", ph: "/ɪm'pru:v/"},
+        {cn: "营地；露营", en: "camp", ph: "/kæmp/"},
+        {cn: "生长；栽种", en: "grow", ph: "/grəʊ/"},
+        {cn: "贴纸", en: "sticker", ph: "/'stɪkə(r)/"},
+        {cn: "驱动", en: "power", ph: "/'paʊə(r)/"},
+        {cn: "可再生的", en: "renewable", ph: "/rɪ'nju:əbl/"},
+        {cn: "讨论", en: "discuss", ph: "/dɪ'skʌs/"},
+        {cn: "到处", en: "everywhere", ph: "/'evriweə(r)/"},
+        {cn: "不可能的", en: "impossible", ph: "/ɪm'pɒsəbl/"},
+        {cn: "太阳能电池板", en: "solar panel", ph: "/ˌsəʊlə'pænl/"},
+        {cn: "太阳能电池", en: "solar cell", ph: "/ˌsəʊlə'sel/"},
+        {cn: "支托(或握持)……之物", en: "holder", ph: "/'həʊldə(r)/"},
+        {cn: "失败", en: "fail", ph: "/feɪl/"},
+        {cn: "比萨饼", en: "pizza", ph: "/'pi:tsə/"},
+        {cn: "烫伤", en: "burn", ph: "/bɜːn/"},
+        {cn: "平底锅", en: "pan", ph: "/pæn/"},
+        {cn: "令人烦恼的", en: "troublesome", ph: "/'trʌblsəm/"},
+        {cn: "幸好", en: "luckily", ph: "/'lʌkɪli/"},
+        {cn: "兴奋地", en: "excitedly", ph: "/ɪk'saɪtɪdli/"},
+        {cn: "层；层次", en: "layer", ph: "/'leɪə(r)/"},
+        {cn: "隔开；分离", en: "separate", ph: "/'sepəreɪt/"},
+        {cn: "无数的；数不尽的", en: "countless", ph: "/'kaʊntləs/"},
+        {cn: "成功", en: "succeed", ph: "/sək'si:d/"},
+        {cn: "有希望地", en: "hopefully", ph: "/'həʊpfəli/"},
+        {cn: "粘贴；拐杖", en: "stick", ph: "/stɪk/"},
+        {cn: "仪器", en: "device", ph: "/dɪ'vaɪs/"},
+        {cn: "离开", en: "away", ph: "/ə'weɪ/"},
+        {cn: "拿走", en: "take away", ph: "/teɪk ə'weɪ/"},
+        {cn: "有创造力的", en: "creative", ph: "/kri'eɪtɪv/"},
+        {cn: "把手", en: "handle", ph: "/'hændl/"},
+        {cn: "骄傲的；自豪的", en: "proud", ph: "/praʊd/"}
+    ],
+    unit2: [
+        {cn: "无线电广播；收音机", en: "radio", ph: "/'reɪdiəʊ/"},
+        {cn: "处理", en: "deal", ph: "/di:l/"},
+        {cn: "处理", en: "deal with", ph: "/di:l wɪð/"},
+        {cn: "害怕；担忧", en: "fear", ph: "/fiə(r)/"},
+        {cn: "低沉的；深的", en: "deep", ph: "/di:p/"},
+        {cn: "令人不舒服的；粗糙的", en: "rough", ph: "/rʌf/"},
+        {cn: "信念；相信", en: "belief", ph: "/bɪ'li:f/"},
+        {cn: "我们自己", en: "ourselves", ph: "/ɑ:'selvz/"},
+        {cn: "虚弱的；无力的", en: "weak", ph: "/wi:k/"},
+        {cn: "心脏；内心", en: "heart", ph: "/hɑːt/"},
+        {cn: "剪纸", en: "paper cutting", ph: "/ˈpeɪpə(r) ˈkʌtɪŋ/"},
+        {cn: "困难", en: "difficulty", ph: "/'dɪfɪkəlti/"},
+        {cn: "青少年", en: "teenager", ph: "/'ti:neɪdʒə(r)/"},
+        {cn: "坦率的；诚实的", en: "honest", ph: "/'ɒnɪst/"},
+        {cn: "继续存在的；活着的", en: "alive", ph: "/ə'laɪv/"},
+        {cn: "吉祥物", en: "mascot", ph: "/'mæskət/"},
+        {cn: "梦想；做梦", en: "dream", ph: "/dri:m/"},
+        {cn: "最终的", en: "final", ph: "/'faɪnl/"},
+        {cn: "下沉；沉没", en: "sink", ph: "/sɪŋk/"},
+        {cn: "随后；后来", en: "later", ph: "/'leɪtə(r)/"},
+        {cn: "消息", en: "news", ph: "/nju:z/"},
+        {cn: "滑稽的；好笑的", en: "funny", ph: "/'fʌni/"},
+        {cn: "服装；演出服", en: "costume", ph: "/'kɒstju:m/"},
+        {cn: "代替", en: "instead", ph: "/ɪn'sted/"},
+        {cn: "代替", en: "instead of", ph: "/ɪn'sted əv/"},
+        {cn: "最好", en: "had better", ph: "/hæd 'betə(r)/"},
+        {cn: "失望", en: "disappointment", ph: "/ˌdɪsə'pɔɪntmənt/"},
+        {cn: "做出反应；回应", en: "respond", ph: "/rɪ'spɒnd/"},
+        {cn: "回响", en: "ring", ph: "/rɪŋ/"},
+        {cn: "毕竟", en: "after all", ph: "/'ɑːftə(r) ɔːl/"},
+        {cn: "决定", en: "decide", ph: "/dɪ'saɪd/"},
+        {cn: "变成", en: "become", ph: "/bɪ'kʌm/"},
+        {cn: "凭借", en: "through", ph: "/θru:/"},
+        {cn: "准备", en: "preparation", ph: "/ˌprepə'reɪʃn/"},
+        {cn: "呼吸；呼气", en: "breath", ph: "/breθ/"},
+        {cn: "观众；人群", en: "crowd", ph: "/kraʊd/"},
+        {cn: "反复呼喊；反复唱", en: "chant", ph: "/tʃɑːnt/"},
+        {cn: "快活而生气勃勃的；明亮的", en: "bright", ph: "/braɪt/"},
+        {cn: "教练", en: "coach", ph: "/kəʊtʃ/"},
+        {cn: "进来", en: "enter", ph: "/'entə(r)/"},
+        {cn: "报名参加", en: "enter for", ph: "/'entə(r) fɔː(r)/"},
+        {cn: "设计", en: "design", ph: "/dɪ'zaɪn/"},
+        {cn: "竞争；比赛", en: "competition", ph: "/ˌkɒmpə'tɪʃn/"},
+        {cn: "机会", en: "chance", ph: "/tʃɑːns/"},
+        {cn: "过去的；以往的", en: "past", ph: "/pɑːst/"},
+        {cn: "同桌", en: "deskmate", ph: "/'deskmeɪt/"},
+        {cn: "一会儿；然而", en: "while", ph: "/waɪl/"},
+        {cn: "坚定地；坚固地", en: "firmly", ph: "/'fɜːmli/"}
+    ],
+    unit3: [
+        {cn: "职业；事业", en: "career", ph: "/kə'rɪə(r)/"},
+        {cn: "指导；引导", en: "guidance", ph: "/'gaɪdns/"},
+        {cn: "实际的", en: "practical", ph: "/'præktɪkl/"},
+        {cn: "理发师", en: "hairdresser", ph: "/'heədresə(r)/"},
+        {cn: "裁缝", en: "tailor", ph: "/'teɪlə(r)/"},
+        {cn: "服务", en: "service", ph: "/'sɜːvɪs/"},
+        {cn: "长官", en: "officer", ph: "/'ɒfɪsə(r)/"},
+        {cn: "消防员", en: "fireman", ph: "/'faɪəmən/"},
+        {cn: "艺术的", en: "artistic", ph: "/ɑ:'tɪstɪk/"},
+        {cn: "摄影师", en: "photographer", ph: "/fə'tɒgrəfə(r)/"},
+        {cn: "艺术家", en: "artist", ph: "/'ɑːtɪst/"},
+        {cn: "(男/女)演员", en: "actor / actress", ph: "/'æktə(r)//'æktrəs/"},
+        {cn: "工程师", en: "engineer", ph: "/ˌendʒɪ'nɪə(r)/"},
+        {cn: "建筑师", en: "architect", ph: "/'ɑːkɪtekt/"},
+        {cn: "设计师", en: "designer", ph: "/dɪ'zaɪnə(r)/"},
+        {cn: "使快乐；娱乐", en: "entertain", ph: "/ˌentə'teɪn/"},
+        {cn: "观众", en: "audience", ph: "/'ɔ:diəns/"},
+        {cn: "摄影场", en: "set", ph: "/set/"},
+        {cn: "角色", en: "role", ph: "/rəʊl/"},
+        {cn: "现场；场景", en: "scene", ph: "/si:n/"},
+        {cn: "到达", en: "arrive", ph: "/ə'raɪv/"},
+        {cn: "页", en: "page", ph: "/peɪdʒ/"},
+        {cn: "知识；学问", en: "knowledge", ph: "/'nɒlɪdʒ/"},
+        {cn: "生物学", en: "biology", ph: "/baɪ'ɒlədʒi/"},
+        {cn: "教育", en: "education", ph: "/ˌedʒu'keɪʃn/"},
+        {cn: "超过，更多", en: "above", ph: "/ə'bʌv/"},
+        {cn: "乐意", en: "readiness", ph: "/'redinəs/"},
+        {cn: "交流；交际", en: "communication", ph: "/kə,mju:nɪ'keɪʃn/"},
+        {cn: "训练；培训", en: "training", ph: "/'treɪnɪŋ/"},
+        {cn: "品尝", en: "taste", ph: "/teɪst/"},
+        {cn: "有可能", en: "maybe", ph: "/'meɪbi/"},
+        {cn: "您的；你的", en: "yours", ph: "/jɔ:z/"},
+        {cn: "顾客；客户", en: "customer", ph: "/'kʌstəmə(r)/"},
+        {cn: "市场；集市", en: "market", ph: "/'mɑːkɪt/"},
+        {cn: "每样事物", en: "everything", ph: "/'evriθɪŋ/"},
+        {cn: "新鲜的", en: "fresh", ph: "/freʃ/"},
+        {cn: "餐厅", en: "restaurant", ph: "/'restrɒnt/"},
+        {cn: "骄傲；自豪", en: "pride", ph: "/praɪd/"},
+        {cn: "(印度)送饭盒人", en: "dabbawala", ph: "/'dɑːbəwɑːlə/"},
+        {cn: "公里；千米", en: "kilometre", ph: "/'kɪləmiːtə(r)/"},
+        {cn: "确切地", en: "exactly", ph: "/ɪg'zæktli/"},
+        {cn: "在任何时候", en: "ever", ph: "/'evə(r)/"},
+        {cn: "中心；中央", en: "centre", ph: "/'sentə(r)/"},
+        {cn: "打招呼；欢迎", en: "greet", ph: "/gri:t/"},
+        {cn: "距离", en: "distance", ph: "/'dɪstəns/"},
+        {cn: "方法；措施", en: "method", ph: "/'meθəd/"},
+        {cn: "简单的", en: "simple", ph: "/'sɪmpl/"},
+        {cn: "铁路；铁道", en: "railway", ph: "/'reɪlweɪ/"},
+        {cn: "相互；彼此", en: "each other", ph: "/i:tʃ 'ʌðə(r)/"},
+        {cn: "地址", en: "address", ph: "/ə'dres/"},
+        {cn: "递送", en: "deliver", ph: "/dɪ'lɪvə(r)/"},
+        {cn: "服务", en: "serve", ph: "/sɜːv/"},
+        {cn: "信任", en: "trust", ph: "/trʌst/"},
+        {cn: "尊重；尊敬", en: "respect", ph: "/rɪ'spekt/"},
+        {cn: "有活力的；活泼的", en: "lively", ph: "/'laɪvli/"},
+        {cn: "词典；字典", en: "dictionary", ph: "/'dɪkʃənri/"}
+    ],
+    unit4: [
+        {cn: "照相机；摄影机", en: "camera", ph: "/'kæmərə/"},
+        {cn: "扬声器；喇叭", en: "speaker", ph: "/'spi:kə(r)/"},
+        {cn: "温控器", en: "thermostat", ph: "/'θɜːməstæt/"},
+        {cn: "它自己", en: "itself", ph: "/ɪt'self/"},
+        {cn: "警报器", en: "alarm", ph: "/ə'lɑːm/"},
+        {cn: "陌生人", en: "stranger", ph: "/'streɪndʒə(r)/"},
+        {cn: "锁", en: "lock", ph: "/lɒk/"},
+        {cn: "勘探；探索", en: "explore", ph: "/ɪk'splɔ:(r)/"},
+        {cn: "(使)轻轻摇晃", en: "rock", ph: "/rɒk/"},
+        {cn: "淋浴", en: "shower", ph: "/'ʃaʊə(r)/"},
+        {cn: "模式；方式", en: "mode", ph: "/məʊd/"},
+        {cn: "(手机)短信息", en: "text message", ph: "/tekst 'mesɪdʒ/"},
+        {cn: "卧室", en: "bedroom", ph: "/'bedru:m/"},
+        {cn: "浴室；盥洗室", en: "bathroom", ph: "/'bɑːθru:m/"},
+        {cn: "建议", en: "suggest", ph: "/sə'dʒest/"},
+        {cn: "保护", en: "protect", ph: "/prə'tekt/"},
+        {cn: "评论", en: "review", ph: "/rɪ'vju:/"},
+        {cn: "供暖；暖气设备", en: "heating", ph: "/'hi:tɪŋ/"},
+        {cn: "指导；指引", en: "guide", ph: "/gaɪd/"},
+        {cn: "个人的；私人的", en: "personal", ph: "/'pɜːsənl/"},
+        {cn: "物主；主人", en: "owner", ph: "/'əʊnə(r)/"},
+        {cn: "闹钟", en: "alarm clock", ph: "/ə'lɑːm klɒk/"},
+        {cn: "追踪", en: "keep track of", ph: "/ki:p træk əv/"},
+        {cn: "日程安排", en: "schedule", ph: "/'ʃedju:l/"},
+        {cn: "医疗(服务)", en: "health care", ph: "/helθ keə(r)/"},
+        {cn: "订购", en: "order", ph: "/'ɔ:də(r)/"},
+        {cn: "发信号；示意", en: "signal", ph: "/'sɪgnəl/"},
+        {cn: "感觉到；意识到", en: "sense", ph: "/sens/"},
+        {cn: "管理；明智地使用", en: "manage", ph: "/'mænɪdʒ/"},
+        {cn: "提醒；使……想起", en: "remind", ph: "/rɪ'maɪnd/"},
+        {cn: "生产", en: "produce", ph: "/prə'dju:s/"},
+        {cn: "保存", en: "store", ph: "/stɔ:(r)/"},
+        {cn: "疼痛的；酸痛的", en: "sore", ph: "/sɔ:(r)/"},
+        {cn: "嗓子", en: "throat", ph: "/θrəʊt/"},
+        {cn: "懂；理解", en: "understand", ph: "/ˌʌndə'stænd/"},
+        {cn: "已经", en: "already", ph: "/ɔ:l'redi/"},
+        {cn: "依靠", en: "depend", ph: "/dɪ'pend/"},
+        {cn: "依赖", en: "depend on", ph: "/dɪ'pend ɒn/"},
+        {cn: "烤箱；烤炉", en: "oven", ph: "/'ʌvn/"},
+        {cn: "确实地；真诚地", en: "truly", ph: "/'tru:li/"}
+    ],
+    unit5: [
+        {cn: "期望；期待", en: "expect", ph: "/ɪk'spekt/"},
+        {cn: "令人愉快的", en: "pleasant", ph: "/'pleznt/"},
+        {cn: "要素", en: "element", ph: "/'elɪmənt/"},
+        {cn: "故事情节", en: "plot", ph: "/plɒt/"},
+        {cn: "主要", en: "main", ph: "/meɪn/"},
+        {cn: "导演", en: "director", ph: "/də'rektə(r)/"},
+        {cn: "有礼貌的", en: "polite", ph: "/pə'laɪt/"},
+        {cn: "不礼貌的", en: "impolite", ph: "/ˌɪmpə'laɪt/"},
+        {cn: "准确无误的", en: "correct", ph: "/kə'rekt/"},
+        {cn: "不准确的", en: "incorrect", ph: "/ˌɪnkə'rekt/"},
+        {cn: "银幕；屏幕", en: "screen", ph: "/skri:n/"},
+        {cn: "网", en: "web", ph: "/web/"},
+        {cn: "蜘蛛", en: "spider", ph: "/'spaɪdə(r)/"},
+        {cn: "友谊；朋友关系", en: "friendship", ph: "/'frendʃɪp/"},
+        {cn: "动画片(制作)", en: "animation", ph: "/ˌænɪ'meɪʃn/"},
+        {cn: "字幕", en: "subtitle", ph: "/'sʌbtaɪtl/"},
+        {cn: "真实的", en: "true", ph: "/tru:/"},
+        {cn: "摔跤", en: "wrestle", ph: "/'resl/"},
+        {cn: "周工作日", en: "weekday", ph: "/'wi:kdeɪ/"},
+        {cn: "海洋", en: "ocean", ph: "/'əʊʃn/"},
+        {cn: "经典作品", en: "classic", ph: "/'klæsɪk/"},
+        {cn: "回来", en: "return", ph: "/rɪ'tɜːn/"},
+        {cn: "共同的；常见的", en: "common", ph: "/'kɒmən/"},
+        {cn: "代；一代人", en: "generation", ph: "/ˌdʒenə'reɪʃn/"},
+        {cn: "动画的", en: "animated", ph: "/'ænɪmeɪtɪd/"},
+        {cn: "男主人公；英雄", en: "hero", ph: "/'hɪərəʊ/"},
+        {cn: "打斗", en: "fight", ph: "/faɪt/"},
+        {cn: "愚蠢的；不明事理的", en: "silly", ph: "/'sɪli/"},
+        {cn: "狐狸", en: "fox", ph: "/fɒks/"},
+        {cn: "想象；想象力", en: "imagination", ph: "/ɪˌmædʒɪ'neɪʃn/"},
+        {cn: "有意义的", en: "meaningful", ph: "/'mi:nɪŋfl/"},
+        {cn: "形式；类型", en: "form", ph: "/fɔ:m/"},
+        {cn: "墨水", en: "ink", ph: "/ɪŋk/"},
+        {cn: "绘画", en: "painting", ph: "/'peɪntɪŋ/"},
+        {cn: "化妆品", en: "make-up", ph: "/'meɪkʌp/"},
+        {cn: "漂亮的", en: "pretty", ph: "/'prɪti/"},
+        {cn: "习俗", en: "custom", ph: "/'kʌstəm/"},
+        {cn: "丰富的", en: "rich", ph: "/rɪtʃ/"},
+        {cn: "完全的", en: "whole", ph: "/həʊl/"},
+        {cn: "魔法", en: "magic", ph: "/'mædʒɪk/"},
+        {cn: "特技效果", en: "special effects", ph: "/'speʃl ɪ'fekts/"},
+        {cn: "推荐；建议", en: "recommend", ph: "/ˌrekə'mend/"},
+        {cn: "航行；乘船游览", en: "cruise", ph: "/kru:z/"},
+        {cn: "吸引力；趣味", en: "interest", ph: "/'ɪntrəst/"},
+        {cn: "塔", en: "tower", ph: "/'taʊə(r)/"},
+        {cn: "旅行者", en: "tourist", ph: "/'tʊərɪst/"}
+    ],
+    unit6: [
+        {cn: "米", en: "metre", ph: "/'mi:tə(r)/"},
+        {cn: "确定……的准确地点", en: "locate", ph: "/ləʊ'keɪt/"},
+        {cn: "总的", en: "total", ph: "/'təʊtl/"},
+        {cn: "长度", en: "length", ph: "/leŋθ/"},
+        {cn: "高度", en: "height", ph: "/haɪt/"},
+        {cn: "影响", en: "influence", ph: "/'ɪnfluəns/"},
+        {cn: "海报", en: "poster", ph: "/'pəʊstə(r)/"},
+        {cn: "呼吸", en: "breathe", ph: "/bri:ð/"},
+        {cn: "冰冻的", en: "frozen", ph: "/'frəʊzn/"},
+        {cn: "教练", en: "trainer", ph: "/'treɪnə(r)/"},
+        {cn: "冒险", en: "adventure", ph: "/əd'ventʃə(r)/"},
+        {cn: "树林", en: "woods", ph: "/wudz/"},
+        {cn: "承诺", en: "promise", ph: "/'prɒmɪs/"},
+        {cn: "血；血液", en: "blood", ph: "/blʌd/"},
+        {cn: "生命线", en: "lifeblood", ph: "/'laɪfblʌd/"},
+        {cn: "有相同的特征", en: "have ... in common", ph: "/hæv ... ɪn 'kɒmən/"},
+        {cn: "航行；乘船游览", en: "cruise", ph: "/kru:z/"},
+        {cn: "吸引力；趣味", en: "interest", ph: "/'ɪntrəst/"},
+        {cn: "塔", en: "tower", ph: "/'taʊə(r)/"},
+        {cn: "旅行者", en: "tourist", ph: "/'tʊərɪst/"},
+        {cn: "向往的地方", en: "attraction", ph: "/ə'trækʃən/"},
+        {cn: "两个，两个(都)", en: "both", ph: "/bəʊθ/"},
+        {cn: "流；流动", en: "flow", ph: "/fləʊ/"},
+        {cn: "最重要的", en: "leading", ph: "/'li:dɪŋ/"},
+        {cn: "港口", en: "port", ph: "/pɔ:t/"},
+        {cn: "环境", en: "environment", ph: "/ɪn'vaɪrənmənt/"},
+        {cn: "提供；供应", en: "provide", ph: "/prə'vaɪd/"},
+        {cn: "河畔；河岸", en: "riverside", ph: "/'rɪvəsaɪd/"},
+        {cn: "几乎", en: "almost", ph: "/'ɔ:lməʊst/"},
+        {cn: "沿着；顺着", en: "along", ph: "/ə'lɒŋ/"},
+        {cn: "岸", en: "bank", ph: "/bæŋk/"},
+        {cn: "养育", en: "nurture", ph: "/'nɜːtʃə(r)/"},
+        {cn: "瀑布", en: "waterfall", ph: "/'wɔ:təfɔ:l/"},
+        {cn: "银色的", en: "silver", ph: "/'sɪlvə(r)/"},
+        {cn: "皮带；腰带", en: "belt", ph: "/belt/"},
+        {cn: "发光", en: "glow", ph: "/gləʊ/"}
+    ]
+    };
+
+    // 2. 状态管理 (用户隔离)
+    let state = {
+        playerName: '',
+        currentQuiz: [], 
+        mistakes: [], 
+        mastered: [], 
+        leaderboard: []
+    };
+
+    // 获取当前用户的存储键名
+    function getUserKey(key) {
+        return `wordApp_${state.playerName}_${key}`;
+    }
+
+    // 从本地存储加载用户数据
+    function loadUserData() {
+        state.mistakes = JSON.parse(localStorage.getItem(getUserKey('mistakes')) || '[]');
+        state.mastered = JSON.parse(localStorage.getItem(getUserKey('mastered')) || '[]');
+        state.leaderboard = JSON.parse(localStorage.getItem(getUserKey('leaderboard')) || '[]');
+    }
+
+    // 保存用户数据
+    function saveUserData() {
+        localStorage.setItem(getUserKey('mistakes'), JSON.stringify(state.mistakes));
+        localStorage.setItem(getUserKey('mastered'), JSON.stringify(state.mastered));
+        localStorage.setItem(getUserKey('leaderboard'), JSON.stringify(state.leaderboard));
+    }
+
+    // 3. 核心逻辑
+    function showView(viewId) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(viewId).classList.add('active');
+        
+        if (viewId === 'view-stats') renderStats();
+    }
+
+    function startQuiz() {
+        const name = document.getElementById('playerName').value.trim();
+        const unit = document.getElementById('unitSelect').value;
+        const count = parseInt(document.getElementById('wordCount').value);
+        
+        if (!name) return alert('请输入你的名字哦！👋');
+        if (isNaN(count) || count < 1 || count > 20) return alert('题目数量请在 1-20 之间！🎯');
+
+        state.playerName = name;
+        loadUserData(); // 加载当前用户的数据
+
+        // 1. 确定词库范围
+        let pool = [];
+        if (unit === 'all') {
+            Object.values(WORD_BANK).forEach(arr => pool.push(...arr));
+        } else {
+            pool = [...WORD_BANK[unit]];
+        }
+
+        // 2. 过滤掉已掌握的单词
+        const unmasteredPool = pool.filter(w => !state.mastered.includes(w.en));
+
+        // 3. 检查是否还有未掌握的单词
+        if (unmasteredPool.length === 0) {
+            alert('🎉 太棒了！这个单元的所有单词你都已经掌握了！\n\n你可以尝试选择"全部单元"或重置已掌握单词。');
+            return;
+        }
+
+        // 4. 随机抽取题目（如果剩余单词少于设定数量，则全部抽取）
+        const actualCount = Math.min(count, unmasteredPool.length);
+        const shuffled = unmasteredPool.sort(() => Math.random() - 0.5);
+        state.currentQuiz = shuffled.slice(0, actualCount).map(w => ({...w, userAnswer: ''}));
+
+        // 如果实际抽取数量少于用户设定，给予提示
+        if (actualCount < count) {
+            alert(`💡 提示：该单元剩余未掌握单词只有 ${actualCount} 个，将全部加入本次挑战！`);
+        }
+
+        renderQuiz();
+        showView('view-quiz');
+    }
+
+    function renderQuiz() {
+        const container = document.getElementById('quizContainer');
+        container.innerHTML = state.currentQuiz.map((item, idx) => `
+            <div class="quiz-item">
+                <div class="quiz-num">${idx + 1}</div>
+                <div class="quiz-cn">${item.cn}</div>
+                <div class="input-group">
+                    <button class="hint-btn" onclick="toggleHint(this, '${item.ph}')" title="点击查看音标">💡</button>
+                    <span class="hint-text">${item.ph}</span>
+                    <input class="quiz-input" type="text" data-idx="${idx}" 
+                           placeholder="英文..." autocomplete="off" spellcheck="false"
+                           oninput="hideHint(this)">
+                </div>
+            </div>
+        `).join('');
+
+        // 绑定回车事件
+        const inputs = container.querySelectorAll('.quiz-input');
+        inputs.forEach((inp, idx) => {
+            inp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (idx < inputs.length - 1) {
+                        inputs[idx + 1].focus();
+                    } else {
+                        submitQuiz();
+                    }
+                }
+            });
+        });
+        
+        // 自动聚焦第一题
+        if(inputs.length > 0) inputs[0].focus();
+    }
+
+    // 音标提示交互逻辑
+    window.toggleHint = function(btn, phonetic) {
+        const hintText = btn.nextElementSibling;
+        if (hintText.style.display === 'inline-block') {
+            hintText.style.display = 'none';
+        } else {
+            hintText.style.display = 'inline-block';
+        }
+    };
+
+    // 输入时自动隐藏音标提示
+    window.hideHint = function(input) {
+        const hintText = input.previousElementSibling;
+        if (hintText.style.display === 'inline-block') {
+            hintText.style.display = 'none';
+        }
+    };
+
+    // 4. 星星特效
+    function createStars(isPerfect) {
+        const colors = isPerfect ? ['#f1c40f', '#f39c12', '#e67e22'] : ['#bdc3c7', '#95a5a6'];
+        const emojis = isPerfect ? ['⭐', '🌟', '✨', '💫'] : ['✨'];
+        const count = isPerfect ? 30 : 10;
+
+        for (let i = 0; i < count; i++) {
+            const star = document.createElement('div');
+            star.className = 'celebration-star';
+            star.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+            
+            const x = window.innerWidth / 2;
+            const y = window.innerHeight / 2;
+            star.style.left = `${x}px`;
+            star.style.top = `${y}px`;
+            
+            const angle = Math.random() * 360;
+            const distance = 100 + Math.random() * 200;
+            const tx = Math.cos(angle * Math.PI / 180) * distance;
+            const ty = Math.sin(angle * Math.PI / 180) * distance;
+            
+            star.style.setProperty('--tx', `${tx}px`);
+            star.style.setProperty('--ty', `${ty}px`);
+            star.style.color = colors[Math.floor(Math.random() * colors.length)];
+            
+            document.body.appendChild(star);
+            setTimeout(() => star.remove(), 1000);
+        }
+    }
+
+    function submitQuiz() {
+        const inputs = document.querySelectorAll('.quiz-input');
+        let score = 0;
+
+        inputs.forEach((inp, idx) => {
+            const userAns = inp.value.trim().toLowerCase();
+            const correctAns = state.currentQuiz[idx].en.toLowerCase();
+            state.currentQuiz[idx].userAnswer = userAns;
+
+            if (userAns === correctAns) {
+                score++;
+                // ✅ 答对加入已掌握列表（去重）
+                const wordEn = state.currentQuiz[idx].en;
+                if (!state.mastered.includes(wordEn)) {
+                    state.mastered.push(wordEn);
+                }
+            } else {
+                // ❌ 答错加入错题本（去重）
+                const wordEn = state.currentQuiz[idx].en;
+                const exists = state.mistakes.some(m => m.en.toLowerCase() === wordEn.toLowerCase());
+                if (!exists) {
+                    state.mistakes.push({
+                        cn: state.currentQuiz[idx].cn, 
+                        en: state.currentQuiz[idx].en
+                    });
+                }
+            }
+        });
+
+        // 保存当前用户数据
+        saveUserData();
+
+        // 星星特效
+        const isPerfect = score === state.currentQuiz.length;
+        createStars(isPerfect);
+
+        // 显示结果
+        document.getElementById('finalScore').textContent = `${score} / ${state.currentQuiz.length}`;
+        renderResultDetails();
+        showView('view-result');
+    }
+
+    function renderResultDetails() {
+        const container = document.getElementById('resultDetails');
+        container.innerHTML = state.currentQuiz.map(item => {
+            const isCorrect = item.userAnswer.toLowerCase() === item.en.toLowerCase();
+            return `
+                <div class="result-item">
+                    <span>${item.cn}</span>
+                    <span class="${isCorrect ? 'correct' : 'wrong'}">
+                        ${isCorrect ? '✅ ' + item.en : '❌ ' + (item.userAnswer || '未作答') + ' → ' + item.en}
+                    </span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // 5. 统计与个人中心
+    function renderStats() {
+        // 排行榜（仅显示当前用户的历史记录）
+        const lbBody = document.getElementById('leaderboardBody');
+        if (state.leaderboard.length === 0) {
+            lbBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#aaa; padding:20px;">暂无记录，快去挑战吧！🚀</td></tr>';
+        } else {
+            // 按分数降序，同分按题数升序
+            const sorted = [...state.leaderboard].sort((a, b) => b.score - a.score || a.total - b.total);
+            lbBody.innerHTML = sorted.map((item, idx) => `
+                <tr>
+                    <td class="${idx < 3 ? 'rank-' + (idx+1) : ''}">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}</td>
+                    <td>${item.name}</td>
+                    <td>${item.score}/${item.total}</td>
+                    <td style="font-size:0.8rem; color:#aaa;">${item.date}</td>
+                </tr>
+            `).join('');
+        }
+
+        // 错题本
+        const mistakesList = document.getElementById('mistakesList');
+        if (state.mistakes.length === 0) {
+            mistakesList.innerHTML = '<p style="text-align:center; color:#aaa; padding:20px;">🎉 太棒了！错题本是空的！</p>';
+        } else {
+            mistakesList.innerHTML = state.mistakes.map(m => 
+                `<span class="mistake-word" title="${m.cn}">${m.en}</span>`
+            ).join('');
+        }
+
+        // 已掌握单词
+        const masteredList = document.getElementById('masteredList');
+        if (state.mastered.length === 0) {
+            masteredList.innerHTML = '<p style="text-align:center; color:#aaa; padding:20px;">📝 还没有掌握的单词，快去挑战吧！</p>';
+        } else {
+            masteredList.innerHTML = state.mastered.map(en => {
+                // 从词库中查找对应的中文
+                let cn = '';
+                for (const unit of Object.values(WORD_BANK)) {
+                    const found = unit.find(w => w.en === en);
+                    if (found) { cn = found.cn; break; }
+                }
+                return `<span class="mastered-word" title="${cn}">${en}</span>`;
+            }).join('');
+        }
+    }
+
+    function switchTab(tabName, btnEl) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+        
+        btnEl.classList.add('active');
+        document.getElementById(`tab-${tabName}`).style.display = 'block';
+    }
+
+    function clearMistakes() {
+        if(confirm('确定要清空当前用户的错题本吗？🗑️')) {
+            state.mistakes = [];
+            saveUserData();
+            renderStats();
+        }
+    }
+
+    function clearMastered() {
+        if(confirm('确定要重置当前用户的已掌握单词吗？\n重置后这些单词会重新出现在默写中。🔄')) {
+            state.mastered = [];
+            saveUserData();
+            renderStats();
+        }
+    }
+
+    // 初始化：记住上次输入的名字
+    document.getElementById('playerName').value = localStorage.getItem('wordApp_lastPlayerName') || '';
+    
+    document.getElementById('playerName').addEventListener('input', function() {
+        localStorage.setItem('wordApp_lastPlayerName', this.value);
+    });
+
+</script>
+</body>
+</html>
