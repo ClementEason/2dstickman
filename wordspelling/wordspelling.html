@@ -32,7 +32,7 @@
         .container {
             background: var(--card-bg);
             width: 100%;
-            max-width: 600px;
+            max-width: 700px;
             border-radius: 24px;
             box-shadow: 0 10px 30px rgba(108, 92, 231, 0.15);
             padding: 30px;
@@ -122,7 +122,12 @@
         .hint-btn:hover { transform: scale(1.2); }
         .hint-text {
             font-size: 0.8rem; color: #e17055; background: #ffeaa7;
-            padding: 2px 6px; border-radius: 4px; display: none;
+            padding: 2px 6px; border-radius: 4px; display: none; flex: 1;
+        }
+        .hint-text.show { 
+            display: inline-flex; /* 修改为 inline-flex，使其不独占一行 */
+            align-items: center; /* 让文字垂直居中 */
+            flex: none; /* 新增：取消弹性布局的伸缩属性，防止宽度被压缩 */
         }
         .quiz-input { 
             width: 160px; 
@@ -238,13 +243,14 @@
             <div class="form-group">
                 <label>📚 选择单词库</label>
                 <select id="unitSelect">
-                    <option value="all">全部单元 (综合复习)</option>
                     <option value="unit1">Unit 1: Growing Up & Technology</option>
                     <option value="unit2">Unit 2: Dealing with Fears & Emotions</option>
                     <option value="unit3">Unit 3: Careers & Services/option>
                     <option value="unit4">Unit 4: Smart Homes & Daily Life</option>
                     <option value="unit5">Unit 5: Films & Entertainment</option>
                     <option value="unit6">Unit 6: Places & Environment</option>
+                    <option value="mistakes">📕 错题本 (专属复习)</option>
+                    <option value="all">全部单元 (综合复习)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -286,7 +292,7 @@
             
             <div id="tab-leaderboard" class="tab-content">
                 <table>
-                    <thead><tr><th>排名</th><th>勇士</th><th>得分</th><th>题数</th></tr></thead>
+                    <thead><tr><th>排名</th><th>勇士</th><th>得分</th><th>日期</th></tr></thead>
                     <tbody id="leaderboardBody"></tbody>
                 </table>
             </div>
@@ -602,6 +608,10 @@
 
     // 获取当前用户的存储键名
     function getUserKey(key) {
+        // 如果是排行榜，则使用固定的全局键名，不区分用户
+        if (key === 'leaderboard') {
+            return `wordApp_GLOBAL_leaderboard`;
+        }
         return `wordApp_${state.playerName}_${key}`;
     }
 
@@ -609,14 +619,12 @@
     function loadUserData() {
         state.mistakes = JSON.parse(localStorage.getItem(getUserKey('mistakes')) || '[]');
         state.mastered = JSON.parse(localStorage.getItem(getUserKey('mastered')) || '[]');
-        state.leaderboard = JSON.parse(localStorage.getItem(getUserKey('leaderboard')) || '[]');
     }
 
     // 保存用户数据
     function saveUserData() {
         localStorage.setItem(getUserKey('mistakes'), JSON.stringify(state.mistakes));
         localStorage.setItem(getUserKey('mastered'), JSON.stringify(state.mastered));
-        localStorage.setItem(getUserKey('leaderboard'), JSON.stringify(state.leaderboard));
     }
 
     // 3. 核心逻辑
@@ -640,10 +648,31 @@
 
         // 1. 确定词库范围
         let pool = [];
-        if (unit === 'all') {
-            Object.values(WORD_BANK).forEach(arr => pool.push(...arr));
+        // 新增逻辑：如果选择了错题本
+        if (unit === 'mistakes') {
+            // 从当前用户的错题本中加载单词，并转换成和词库一样的格式 {cn: ..., en: ..., ph: ...}
+            // 注意：错题本里可能没有音标，这里给音标字段一个默认空字符串
+            // 检查是否输入了名字（虽然前面的逻辑已经检查过，但这里再确认一次更保险）
+        if (!name) {
+            return alert('请先输入你的名字，才能加载你的专属错题本哦！👋');
+        }
+        
+        // 检查当前用户的错题本是否为空
+        // 注意：loadUserData() 已经在前面被调用，所以 state.mistakes 已经是最新数据
+        if (state.mistakes.length === 0) {
+            return alert('🎉 你的错题本还是空的！\n\n先去挑战一下，积累一些错题再来复习吧！🚀');
+        }
+            pool = state.mistakes.map(item => ({
+                cn: item.cn,
+                en: item.en,
+                ph: item.ph || ''  // 如果没有音标，默认空字符串 
+            }));
         } else {
-            pool = [...WORD_BANK[unit]];
+            if (unit === 'all') {
+                Object.values(WORD_BANK).forEach(arr => pool.push(...arr));
+            } else {
+                pool = [...WORD_BANK[unit]];
+            }
         }
 
         // 2. 过滤掉已掌握的单词
@@ -671,17 +700,17 @@
 
     function renderQuiz() {
         const container = document.getElementById('quizContainer');
+        // 修改点：移除了 onclick，增加了 data-phonetic="${item.ph}"
         container.innerHTML = state.currentQuiz.map((item, idx) => `
             <div class="quiz-item">
-                <div class="quiz-num">${idx + 1}</div>
-                <div class="quiz-cn">${item.cn}</div>
-                <div class="input-group">
-                    <button class="hint-btn" onclick="toggleHint(this, '${item.ph}')" title="点击查看音标">💡</button>
-                    <span class="hint-text">${item.ph}</span>
-                    <input class="quiz-input" type="text" data-idx="${idx}" 
-                           placeholder="英文..." autocomplete="off" spellcheck="false"
-                           oninput="hideHint(this)">
-                </div>
+            <div class="quiz-num">${idx + 1}</div>
+            <div class="quiz-cn">${item.cn}</div>
+            <div class="input-group">
+                <!-- 使用 data-phonetic 属性存储音标 -->
+                <button class="hint-btn" data-phonetic="${item.ph}" title="点击查看音标">💡</button>
+                <span class="hint-text">${item.ph}</span>
+                <input class="quiz-input" type="text" data -idx="${idx}" placeholder="英文..." autocomplete="off" spellcheck="false" oninput="hideHint(this)">
+            </div>
             </div>
         `).join('');
 
@@ -699,28 +728,35 @@
                 }
             });
         });
+
+        // --- 新增代码：为音标按钮添加事件监听器 ---
+        const hintBtns = container.querySelectorAll('.hint-btn');
+        hintBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+            toggleHint(this);
+            });
+        });
+        // --- 新增代码结束 ---
         
         // 自动聚焦第一题
         if(inputs.length > 0) inputs[0].focus();
     }
 
-    // 音标提示交互逻辑
-    window.toggleHint = function(btn, phonetic) {
+    // 修改点：函数不再接收 phonetic 参数
+    window.toggleHint = function(btn) {
         const hintText = btn.nextElementSibling;
-        if (hintText.style.display === 'inline-block') {
-            hintText.style.display = 'none';
-        } else {
-            hintText.style.display = 'inline-block';
-        }
+        // 使用 classList.toggle 来切换 .show 类
+        hintText.classList.toggle('show');
+        // 找到当前题目的外层容器，并添加一个类名，表示这道题用过了提示
+        btn.closest('.quiz-item').classList.add('hint-used');
     };
 
     // 输入时自动隐藏音标提示
     window.hideHint = function(input) {
         const hintText = input.previousElementSibling;
-        if (hintText.style.display === 'inline-block') {
-            hintText.style.display = 'none';
-        }
-    };
+        // 使用 classList.remove 来移除 .show 类
+        hintText.classList.remove('show');
+    }
 
     // 4. 星星特效
     function createStars(isPerfect) {
@@ -764,9 +800,15 @@
             if (userAns === correctAns) {
                 score++;
                 // ✅ 答对加入已掌握列表（去重）
-                const wordEn = state.currentQuiz[idx].en;
-                if (!state.mastered.includes(wordEn)) {
+                // 1. 找到当前题目对应的 DOM 元素
+                const currentQuizItem = inp.closest('.quiz-item');
+                
+                // 2. 只有当答案正确，并且没有使用过提示（即没有 'hint-used' 类名）时，才加入已掌握列表
+                if (!currentQuizItem.classList.contains('hint-used')) {
+                    const wordEn = state.currentQuiz[idx].en;
+                    if (!state.mastered.includes(wordEn)) {
                     state.mastered.push(wordEn);
+                    }
                 }
             } else {
                 // ❌ 答错加入错题本（去重）
@@ -775,11 +817,26 @@
                 if (!exists) {
                     state.mistakes.push({
                         cn: state.currentQuiz[idx].cn, 
-                        en: state.currentQuiz[idx].en
+                        en: state.currentQuiz[idx].en,
+                        ph: state.currentQuiz[idx].ph
                     });
                 }
             }
         });
+
+        // 1. 获取现有的全局排行榜
+        let globalLeaderboard = JSON.parse(localStorage.getItem('wordApp_GLOBAL_leaderboard') || '[]');
+
+        // 2. 将本次成绩添加到全局排行榜
+        globalLeaderboard.push({
+            name: state.playerName,
+            score: score,
+            total: state.currentQuiz.length,
+            date: new Date().toLocaleDateString()
+        });
+
+        // 3. 保存更新后的全局排行榜
+        localStorage.setItem('wordApp_GLOBAL_leaderboard', JSON.stringify(globalLeaderboard));
 
         // 保存当前用户数据
         saveUserData();
@@ -811,13 +868,15 @@
 
     // 5. 统计与个人中心
     function renderStats() {
-        // 排行榜（仅显示当前用户的历史记录）
+        // 1. 读取全局排行榜数据
+        const globalLeaderboard = JSON.parse(localStorage.getItem('wordApp_GLOBAL_leaderboard') || '[]');
+
+        // 排行榜
         const lbBody = document.getElementById('leaderboardBody');
-        if (state.leaderboard.length === 0) {
+        if (globalLeaderboard.length === 0) { // 使用 globalLeaderboard
             lbBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#aaa; padding:20px;">暂无记录，快去挑战吧！🚀</td></tr>';
         } else {
-            // 按分数降序，同分按题数升序
-            const sorted = [...state.leaderboard].sort((a, b) => b.score - a.score || a.total - b.total);
+            const sorted = [...globalLeaderboard].sort((a, b) => b.score - a.score || a.total - b.total); // 使用 globalLeaderboard
             lbBody.innerHTML = sorted.map((item, idx) => `
                 <tr>
                     <td class="${idx < 3 ? 'rank-' + (idx+1) : ''}">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}</td>
@@ -881,9 +940,25 @@
 
     // 初始化：记住上次输入的名字
     document.getElementById('playerName').value = localStorage.getItem('wordApp_lastPlayerName') || '';
+
+    const playerNameInput = document.getElementById('playerName');
+    playerNameInput.value = localStorage.getItem('wordApp_lastPlayerName') || '';
+
+    // 新增：根据自动填入的用户名加载数据
+    if (playerNameInput.value) {
+    state.playerName = playerNameInput.value;
+    loadUserData();
+    }
     
     document.getElementById('playerName').addEventListener('input', function() {
         localStorage.setItem('wordApp_lastPlayerName', this.value);
+        // 2. 更新当前状态中的用户名
+        state.playerName = this.value;
+        
+        // 3. 关键步骤：根据新的用户名，立即加载该用户的数据
+        if (this.value) {
+            loadUserData();
+        }
     });
 
 </script>
